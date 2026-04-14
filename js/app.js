@@ -1,574 +1,700 @@
 /* =====================================================================
-   Tekmetric BI Viewer — Client Application
+   Tekmetric API Explorer — Client
    ===================================================================== */
-
 (function () {
   "use strict";
 
-  // -- helpers ---------------------------------------------------------------
+  var BASE = (window.API_BASE || "").replace(/\/+$/, "");
+  var el = function (id) { return document.getElementById(id); };
 
-  const $ = (id) => document.getElementById(id);
-  const shopSel = () => $("shopSelect").value;
-  const BASE = (window.API_BASE || "").replace(/\/+$/, "");
+  console.log("[API Explorer] boot, BASE =", BASE);
 
-  function cents(v) {
-    return v != null ? "$" + (v / 100).toFixed(2) : "\u2014";
-  }
-  function d(v) {
-    if (!v) return "\u2014";
-    return new Date(v).toLocaleDateString();
-  }
-  function dt(v) {
-    if (!v) return "\u2014";
-    const x = new Date(v);
-    return (
-      x.toLocaleDateString() +
-      " " +
-      x.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    );
-  }
-  function esc(s) {
-    return s ? String(s).replace(/</g, "&lt;") : "\u2014";
-  }
-  function errHtml(e) {
-    return '<div class="error-msg">' + esc(e.message || e) + "</div>";
-  }
+  /* ---- endpoint registry ------------------------------------------------ */
 
-  async function api(url) {
-    $("statusText").textContent = "Loading\u2026";
-    try {
-      const r = await fetch(BASE + url);
-      if (!r.ok) {
-        let msg;
-        try { msg = await r.text(); } catch (_) { msg = r.statusText; }
-        throw new Error(msg);
-      }
-      const d = await r.json();
-      $("statusText").textContent = "Ready";
-      return d;
-    } catch (e) {
-      $("statusText").textContent = "Error";
-      throw e;
+  var ENDPOINTS = [
+    {
+      id: "customers", name: "Customers", path: "/api/customers", icon: "users",
+      desc: "Search customers by name, email, phone. Filter by type, marketing opt-in, date ranges.",
+      params: [
+        { key: "shop_id", label: "Shop ID", type: "shop", required: true },
+        { key: "search", label: "Search", type: "text", hint: "Name, email, phone" },
+        { key: "customerTypeId", label: "Type", type: "select", opts: [["", "All"], ["1", "Person"], ["2", "Business"]] },
+        { key: "okForMarketing", label: "OK Marketing", type: "select", opts: [["", "Any"], ["true", "Yes"], ["false", "No"]] },
+        { key: "eligibleForAccountsReceivable", label: "AR Eligible", type: "select", opts: [["", "Any"], ["true", "Yes"], ["false", "No"]] },
+        { key: "updatedDateStart", label: "Updated From", type: "date" },
+        { key: "updatedDateEnd", label: "Updated To", type: "date" },
+        { key: "deletedDateStart", label: "Deleted From", type: "date" },
+        { key: "deletedDateEnd", label: "Deleted To", type: "date" },
+        { key: "sort", label: "Sort", type: "select", opts: [["", "Default"], ["lastName", "Last Name"], ["firstName", "First Name"], ["email", "Email"]] },
+        { key: "sortDirection", label: "Direction", type: "select", opts: [["", "Default"], ["ASC", "ASC"], ["DESC", "DESC"]] },
+        { key: "size", label: "Size", type: "select", opts: [["20", "20"], ["50", "50"], ["100", "100"]], def: "20" },
+        { key: "page", label: "Page", type: "number", def: "0", hint: "0-indexed" }
+      ]
+    },
+    {
+      id: "customer-detail", name: "Customer by ID", path: "/api/customers/{id}", icon: "user",
+      desc: "Get a single customer record by Tekmetric ID.",
+      params: [{ key: "id", label: "Customer ID", type: "number", required: true, pathParam: true }]
+    },
+    {
+      id: "customer-search", name: "Cross-Shop Search", path: "/api/customer/search", icon: "search",
+      desc: "Search for a customer across ALL shop locations by email or phone.",
+      params: [
+        { key: "email", label: "Email", type: "text", hint: "customer@email.com" },
+        { key: "phone", label: "Phone", type: "text", hint: "555-123-4567" }
+      ]
+    },
+    {
+      id: "vehicles", name: "Vehicles", path: "/api/vehicles", icon: "truck",
+      desc: "List vehicles. Filter by customer, search year/make/model, date ranges.",
+      params: [
+        { key: "shop_id", label: "Shop ID", type: "shop", required: true },
+        { key: "search", label: "Search", type: "text", hint: "Year, make, model" },
+        { key: "customerId", label: "Customer ID", type: "number" },
+        { key: "updatedDateStart", label: "Updated From", type: "date" },
+        { key: "updatedDateEnd", label: "Updated To", type: "date" },
+        { key: "deletedDateStart", label: "Deleted From", type: "date" },
+        { key: "deletedDateEnd", label: "Deleted To", type: "date" },
+        { key: "sort", label: "Sort", type: "text", hint: "Field name" },
+        { key: "sortDirection", label: "Direction", type: "select", opts: [["", "Default"], ["ASC", "ASC"], ["DESC", "DESC"]] },
+        { key: "size", label: "Size", type: "select", opts: [["20", "20"], ["50", "50"], ["100", "100"]], def: "20" },
+        { key: "page", label: "Page", type: "number", def: "0" }
+      ]
+    },
+    {
+      id: "vehicle-detail", name: "Vehicle by ID", path: "/api/vehicles/{id}", icon: "truck",
+      desc: "Get a single vehicle by Tekmetric ID.",
+      params: [{ key: "id", label: "Vehicle ID", type: "number", required: true, pathParam: true }]
+    },
+    {
+      id: "repair-orders", name: "Repair Orders", path: "/api/repair-orders", icon: "tool",
+      desc: "List ROs. Filter by status, customer, vehicle, RO#, created/posted/updated/deleted dates.",
+      params: [
+        { key: "shop_id", label: "Shop ID", type: "shop", required: true },
+        { key: "search", label: "Search", type: "text", hint: "RO #, name, vehicle" },
+        { key: "customerId", label: "Customer ID", type: "number" },
+        { key: "vehicleId", label: "Vehicle ID", type: "number" },
+        { key: "repairOrderNumber", label: "RO Number", type: "number" },
+        { key: "repairOrderStatusId", label: "Status", type: "select", opts: [["", "All"], ["1", "Estimate"], ["2", "WIP"], ["3", "Complete"], ["4", "Saved for Later"], ["5", "Posted"], ["6", "Accts Receivable"], ["7", "Deleted"]] },
+        { key: "start", label: "Created From", type: "date" },
+        { key: "end", label: "Created To", type: "date" },
+        { key: "postedDateStart", label: "Posted From", type: "date" },
+        { key: "postedDateEnd", label: "Posted To", type: "date" },
+        { key: "updatedDateStart", label: "Updated From", type: "date" },
+        { key: "updatedDateEnd", label: "Updated To", type: "date" },
+        { key: "deletedDateStart", label: "Deleted From", type: "date" },
+        { key: "deletedDateEnd", label: "Deleted To", type: "date" },
+        { key: "sort", label: "Sort", type: "select", opts: [["", "Default"], ["createdDate", "Created Date"], ["repairOrderNumber", "RO Number"], ["customer.firstName", "First Name"], ["customer.lastName", "Last Name"]] },
+        { key: "sortDirection", label: "Direction", type: "select", opts: [["", "Default"], ["ASC", "ASC"], ["DESC", "DESC"]] },
+        { key: "size", label: "Size", type: "select", opts: [["20", "20"], ["50", "50"], ["100", "100"]], def: "20" },
+        { key: "page", label: "Page", type: "number", def: "0" }
+      ]
+    },
+    {
+      id: "ro-detail", name: "RO by ID", path: "/api/repair-orders/{id}", icon: "tool",
+      desc: "Get a single repair order with jobs, sublets, fees, discounts, and concerns.",
+      params: [{ key: "id", label: "RO ID", type: "number", required: true, pathParam: true }]
+    },
+    {
+      id: "jobs", name: "Jobs", path: "/api/jobs", icon: "clipboard",
+      desc: "List jobs. Filter by RO, customer, vehicle, authorization status and dates.",
+      params: [
+        { key: "shop_id", label: "Shop ID", type: "shop", required: true },
+        { key: "repairOrderId", label: "RO ID", type: "number" },
+        { key: "customerId", label: "Customer ID", type: "number" },
+        { key: "vehicleId", label: "Vehicle ID", type: "number" },
+        { key: "authorized", label: "Authorized", type: "select", opts: [["", "All"], ["true", "Yes"], ["false", "No"]] },
+        { key: "authorizedDateStart", label: "Auth From", type: "date" },
+        { key: "authorizedDateEnd", label: "Auth To", type: "date" },
+        { key: "updatedDateStart", label: "Updated From", type: "date" },
+        { key: "updatedDateEnd", label: "Updated To", type: "date" },
+        { key: "repairOrderStatusId", label: "RO Status", type: "select", opts: [["", "All"], ["1", "Estimate"], ["2", "WIP"], ["3", "Complete"], ["4", "Saved"], ["5", "Posted"], ["6", "Accts Recv"]] },
+        { key: "sort", label: "Sort", type: "select", opts: [["", "Default"], ["authorizedDate", "Auth Date"]] },
+        { key: "sortDirection", label: "Direction", type: "select", opts: [["", "Default"], ["ASC", "ASC"], ["DESC", "DESC"]] },
+        { key: "size", label: "Size", type: "select", opts: [["20", "20"], ["50", "50"], ["100", "100"]], def: "20" },
+        { key: "page", label: "Page", type: "number", def: "0" }
+      ]
+    },
+    {
+      id: "job-detail", name: "Job by ID", path: "/api/jobs/{id}", icon: "clipboard",
+      desc: "Get a single job with labor, parts, fees, discounts detail.",
+      params: [{ key: "id", label: "Job ID", type: "number", required: true, pathParam: true }]
+    },
+    {
+      id: "canned-jobs", name: "Canned Jobs", path: "/api/canned-jobs", icon: "star",
+      desc: "List canned (template) jobs. Filter by name, categories, labor rates.",
+      params: [
+        { key: "shop_id", label: "Shop ID", type: "shop", required: true },
+        { key: "search", label: "Search", type: "text", hint: "Job name" },
+        { key: "categories", label: "Categories", type: "text", hint: "Comma-separated codes" },
+        { key: "rates", label: "Labor Rates", type: "text", hint: "In cents, comma-separated" },
+        { key: "sort", label: "Sort", type: "select", opts: [["", "Default"], ["jobCategory", "Category"]] },
+        { key: "sortDirection", label: "Direction", type: "select", opts: [["", "Default"], ["ASC", "ASC"], ["DESC", "DESC"]] },
+        { key: "size", label: "Size", type: "select", opts: [["20", "20"], ["50", "50"], ["100", "100"]], def: "20" },
+        { key: "page", label: "Page", type: "number", def: "0" }
+      ]
+    },
+    {
+      id: "appointments", name: "Appointments", path: "/api/appointments", icon: "calendar",
+      desc: "List appointments. Filter by date range, customer, vehicle, include/exclude deleted.",
+      params: [
+        { key: "shop_id", label: "Shop ID", type: "shop", required: true },
+        { key: "customerId", label: "Customer ID", type: "number" },
+        { key: "vehicleId", label: "Vehicle ID", type: "number" },
+        { key: "start", label: "From", type: "date" },
+        { key: "end", label: "To", type: "date" },
+        { key: "updatedDateStart", label: "Updated From", type: "date" },
+        { key: "updatedDateEnd", label: "Updated To", type: "date" },
+        { key: "includeDeleted", label: "Incl. Deleted", type: "select", opts: [["true", "Yes"], ["false", "No"]], def: "true" },
+        { key: "sort", label: "Sort", type: "text", hint: "Field name" },
+        { key: "sortDirection", label: "Direction", type: "select", opts: [["", "Default"], ["ASC", "ASC"], ["DESC", "DESC"]] },
+        { key: "size", label: "Size", type: "select", opts: [["20", "20"], ["50", "50"], ["100", "100"]], def: "20" },
+        { key: "page", label: "Page", type: "number", def: "0" }
+      ]
+    },
+    {
+      id: "appt-detail", name: "Appointment by ID", path: "/api/appointments/{id}", icon: "calendar",
+      desc: "Get a single appointment by Tekmetric ID.",
+      params: [{ key: "id", label: "Appointment ID", type: "number", required: true, pathParam: true }]
+    },
+    {
+      id: "employees", name: "Employees", path: "/api/employees", icon: "user-check",
+      desc: "List employees. Filter by name, updated dates.",
+      params: [
+        { key: "shop_id", label: "Shop ID", type: "shop", required: true },
+        { key: "search", label: "Search", type: "text", hint: "Name" },
+        { key: "updatedDateStart", label: "Updated From", type: "date" },
+        { key: "updatedDateEnd", label: "Updated To", type: "date" },
+        { key: "sort", label: "Sort", type: "text", hint: "Field name" },
+        { key: "sortDirection", label: "Direction", type: "select", opts: [["", "Default"], ["ASC", "ASC"], ["DESC", "DESC"]] },
+        { key: "size", label: "Size", type: "select", opts: [["20", "20"], ["50", "50"], ["100", "100"]], def: "20" },
+        { key: "page", label: "Page", type: "number", def: "0" }
+      ]
+    },
+    {
+      id: "emp-detail", name: "Employee by ID", path: "/api/employees/{id}", icon: "user-check",
+      desc: "Get a single employee by Tekmetric ID.",
+      params: [{ key: "id", label: "Employee ID", type: "number", required: true, pathParam: true }]
+    },
+    {
+      id: "inventory", name: "Inventory", path: "/api/inventory", icon: "box",
+      desc: "List inventory. Filter by part type (Parts/Tires/Batteries), part numbers, tire dimensions.",
+      params: [
+        { key: "shop_id", label: "Shop ID", type: "shop", required: true },
+        { key: "partTypeId", label: "Part Type", type: "select", opts: [["1", "Parts"], ["2", "Tires"], ["5", "Batteries"]], def: "1" },
+        { key: "partNumbers", label: "Part #", type: "text", hint: "Exact match, comma-sep" },
+        { key: "width", label: "Width", type: "text", hint: "Tires only" },
+        { key: "ratio", label: "Ratio", type: "text", hint: "Tires only" },
+        { key: "diameter", label: "Diameter", type: "text", hint: "Tires only" },
+        { key: "tireSize", label: "Tire Size", type: "text", hint: "width/ratio/diameter" },
+        { key: "sort", label: "Sort", type: "select", opts: [["", "Default"], ["id", "ID"], ["name", "Name"], ["brand", "Brand"], ["partNumber", "Part #"]] },
+        { key: "sortDirection", label: "Direction", type: "select", opts: [["", "Default"], ["ASC", "ASC"], ["DESC", "DESC"]] },
+        { key: "size", label: "Size", type: "select", opts: [["20", "20"], ["50", "50"], ["100", "100"]], def: "20" },
+        { key: "page", label: "Page", type: "number", def: "0" }
+      ]
+    },
+    {
+      id: "shops-config", name: "Shops (Config)", path: "/api/shops", icon: "home",
+      desc: "List all configured shop locations from server environment.", params: []
+    },
+    {
+      id: "shops-tek", name: "Shops (Tekmetric)", path: "/api/shops/tekmetric", icon: "home",
+      desc: "Fetch raw shop data directly from Tekmetric API.", params: []
+    },
+    {
+      id: "shop-detail", name: "Shop by ID", path: "/api/shops/{id}", icon: "home",
+      desc: "Get a single shop by Tekmetric ID.",
+      params: [{ key: "id", label: "Shop ID", type: "number", required: true, pathParam: true }]
     }
-  }
+  ];
 
-  function paginate(containerId, page, totalPages, loaderName) {
-    const c = $(containerId);
-    if (!c) return;
-    c.innerHTML =
-      '<button ' + (page <= 0 ? "disabled" : "") + " onclick=\"" + loaderName + "(" + (page - 1) + ')\">Prev</button>' +
-      '<span class="pg-info">Page ' + (page + 1) + " of " + (totalPages || 1) + "</span>" +
-      '<button ' + (page >= totalPages - 1 ? "disabled" : "") + " onclick=\"" + loaderName + "(" + (page + 1) + ')\">Next</button>';
-  }
+  /* ---- SVG icons -------------------------------------------------------- */
 
-  // -- modal -----------------------------------------------------------------
+  var ICONS = {
+    users:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+    user:         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+    "user-check": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>',
+    truck:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 17h14M5 17a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2.5l1.5-2h6l1.5 2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2"/><circle cx="7.5" cy="15.5" r="1.5"/><circle cx="16.5" cy="15.5" r="1.5"/></svg>',
+    tool:         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76Z"/></svg>',
+    clipboard:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="m9 14 2 2 4-4"/></svg>',
+    star:         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+    calendar:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+    box:          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
+    home:         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
+    search:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+  };
 
-  function showDetail(title, obj) {
-    $("modalTitle").textContent = title;
-    $("modalBody").textContent = JSON.stringify(obj, null, 2);
-    $("detailModal").classList.add("show");
-  }
-  function closeModal() {
-    $("detailModal").classList.remove("show");
-  }
-  $("detailModal").addEventListener("click", function (e) {
-    if (e.target === e.currentTarget) closeModal();
-  });
-  window.closeModal = closeModal;
+  /* ---- state ------------------------------------------------------------ */
 
-  // -- mobile sidebar --------------------------------------------------------
+  var currentEp = null;
+  var lastResponse = null;
+  var lastStatus = 0;
+  var reqHistory = [];
+  var shops = [];
 
-  const sidebar = document.querySelector(".sidebar");
-  const overlay = document.querySelector(".sidebar-overlay");
-  const burger = document.querySelector(".hamburger");
+  /* ---- sidebar nav ------------------------------------------------------ */
 
-  function openSidebar() {
-    sidebar.classList.add("open");
-    overlay.classList.add("show");
-  }
-  function closeSidebar() {
-    sidebar.classList.remove("open");
-    overlay.classList.remove("show");
-  }
-  if (burger) burger.addEventListener("click", openSidebar);
-  if (overlay) overlay.addEventListener("click", closeSidebar);
-
-  // -- navigation ------------------------------------------------------------
-
-  function showPage(id) {
-    document.querySelectorAll(".page").forEach(function (p) {
-      p.classList.remove("active");
+  function buildNav() {
+    var navEl = el("endpointNav");
+    if (!navEl) { console.error("endpointNav not found"); return; }
+    var html = "";
+    ENDPOINTS.forEach(function (ep) {
+      html += '<a href="#" data-ep="' + ep.id + '" onclick="EP.go(\'' + ep.id + '\');return false">' +
+        (ICONS[ep.icon] || "") +
+        '<span>' + ep.name + '</span>' +
+        '<span class="ep-method">GET</span></a>';
     });
-    var el = $("page-" + id);
-    if (el) el.classList.add("active");
+    navEl.innerHTML = html;
+    console.log("[API Explorer] nav built, " + ENDPOINTS.length + " endpoints");
+  }
 
-    document.querySelectorAll(".sidebar nav a").forEach(function (a) {
-      a.classList.remove("active");
-    });
-    var link = document.querySelector('[data-page="' + id + '"]');
+  /* ---- navigation ------------------------------------------------------- */
+
+  function goTo(id) {
+    document.querySelectorAll(".page").forEach(function (p) { p.classList.remove("active"); });
+    document.querySelectorAll(".sidebar nav a").forEach(function (a) { a.classList.remove("active"); });
+
+    if (id === "dashboard") {
+      el("page-dashboard").classList.add("active");
+      var dl = document.querySelector('[data-ep="dashboard"]');
+      if (dl) dl.classList.add("active");
+      closeSidebar();
+      loadDashboard();
+      return;
+    }
+
+    var ep = ENDPOINTS.find(function (e) { return e.id === id; });
+    if (!ep) { console.warn("Unknown endpoint:", id); return; }
+
+    currentEp = ep;
+    el("page-explorer").classList.add("active");
+    var link = document.querySelector('[data-ep="' + id + '"]');
     if (link) link.classList.add("active");
 
+    el("epTitle").textContent = ep.name;
+    el("epDesc").textContent = ep.desc;
+    renderParams(ep);
+    updateUrlPreview();
+    clearResponse();
     closeSidebar();
-
-    var loaders = {
-      dashboard: loadDashboard,
-      customers: loadCustomers,
-      vehicles: loadVehicles,
-      "repair-orders": loadRepairOrders,
-      jobs: loadJobs,
-      "canned-jobs": loadCannedJobs,
-      appointments: loadAppointments,
-      calendar: initCalendar,
-      employees: loadEmployees,
-      inventory: loadInventory,
-      shops: loadShopCards,
-    };
-    if (loaders[id]) loaders[id]();
   }
-  window.showPage = showPage;
 
-  window.onShopChange = function () {
-    var active = document.querySelector(".page.active");
-    if (active) showPage(active.id.replace("page-", ""));
-  };
+  /* ---- render param controls -------------------------------------------- */
 
-  // -- view helpers ----------------------------------------------------------
+  function renderParams(ep) {
+    var grid = el("paramGrid");
+    if (!ep.params.length) {
+      grid.innerHTML = '<div class="param-item" style="grid-column:1/-1;text-align:center;color:var(--muted);padding:20px">No parameters \u2014 click Send to execute</div>';
+      return;
+    }
+    var html = "";
+    ep.params.forEach(function (p) {
+      html += '<div class="param-item"><label>' + p.label;
+      if (p.required) html += ' <span class="req">*</span>';
+      html += '</label>';
 
-  async function viewRO(id) { try { showDetail("Repair Order #" + id, await api("/api/repair-orders/" + id)); } catch (e) { showDetail("Error", { error: e.message }); } }
-  async function viewAppt(id) { try { showDetail("Appointment #" + id, await api("/api/appointments/" + id)); } catch (e) { showDetail("Error", { error: e.message }); } }
-  async function viewCust(id) { try { showDetail("Customer #" + id, await api("/api/customers/" + id)); } catch (e) { showDetail("Error", { error: e.message }); } }
-  async function viewVeh(id) { try { showDetail("Vehicle #" + id, await api("/api/vehicles/" + id)); } catch (e) { showDetail("Error", { error: e.message }); } }
-  async function viewJob(id) { try { showDetail("Job #" + id, await api("/api/jobs/" + id)); } catch (e) { showDetail("Error", { error: e.message }); } }
-  async function viewEmp(id) { try { showDetail("Employee #" + id, await api("/api/employees/" + id)); } catch (e) { showDetail("Error", { error: e.message }); } }
-  async function viewShopDetail(id) { try { showDetail("Shop #" + id, await api("/api/shops/" + id)); } catch (e) { showDetail("Error", { error: e.message }); } }
-  window.viewRO = viewRO; window.viewAppt = viewAppt; window.viewCust = viewCust;
-  window.viewVeh = viewVeh; window.viewJob = viewJob; window.viewEmp = viewEmp;
-  window.viewShopDetail = viewShopDetail;
+      if (p.type === "shop") {
+        html += '<select id="p_' + p.key + '" onchange="EP.updUrl()">';
+        shops.forEach(function (s) {
+          html += '<option value="' + s.shop_id + '">' + s.name + ' (' + s.shop_id + ')</option>';
+        });
+        html += '</select>';
+      } else if (p.type === "select") {
+        html += '<select id="p_' + p.key + '" onchange="EP.updUrl()">';
+        (p.opts || []).forEach(function (o) {
+          var sel = p.def === o[0] ? " selected" : "";
+          html += '<option value="' + o[0] + '"' + sel + '>' + o[1] + '</option>';
+        });
+        html += '</select>';
+      } else if (p.type === "date") {
+        html += '<input type="date" id="p_' + p.key + '" onchange="EP.updUrl()">';
+      } else if (p.type === "number") {
+        html += '<input type="number" id="p_' + p.key + '" value="' + (p.def || "") + '" oninput="EP.updUrl()">';
+      } else {
+        html += '<input type="text" id="p_' + p.key + '" placeholder="' + (p.hint || "") + '" oninput="EP.updUrl()">';
+      }
+      if (p.hint) html += '<span class="param-hint">' + p.hint + '</span>';
+      html += '</div>';
+    });
+    grid.innerHTML = html;
 
-  // -- dashboard -------------------------------------------------------------
+    var shopParam = el("p_shop_id");
+    if (shopParam) shopParam.value = el("shopSelect").value;
+  }
+
+  /* ---- URL builder ------------------------------------------------------ */
+
+  function buildUrl() {
+    if (!currentEp) return "";
+    var path = currentEp.path;
+    var qp = [];
+    currentEp.params.forEach(function (p) {
+      var input = el("p_" + p.key);
+      if (!input) return;
+      var v = input.value;
+      if (v === "" || v === undefined || v === null) return;
+      if (p.pathParam) {
+        path = path.replace("{id}", v);
+      } else {
+        qp.push(encodeURIComponent(p.key) + "=" + encodeURIComponent(v));
+      }
+    });
+    return path + (qp.length ? "?" + qp.join("&") : "");
+  }
+
+  function updateUrlPreview() {
+    var preview = el("urlPreview");
+    if (preview) preview.textContent = BASE + buildUrl();
+  }
+
+  /* ---- send request ----------------------------------------------------- */
+
+  async function sendRequest(overridePage) {
+    if (!currentEp) return;
+    if (overridePage !== undefined) {
+      var pgEl = el("p_page");
+      if (pgEl) pgEl.value = overridePage;
+      updateUrlPreview();
+    }
+
+    var url = buildUrl();
+    var fullUrl = BASE + url;
+
+    el("statusText").textContent = "Loading\u2026";
+    el("btnSend").disabled = true;
+    el("respPretty").innerHTML = '<div class="loading-row"><div class="spinner"></div> Fetching\u2026</div>';
+
+    var t0 = performance.now();
+    try {
+      var resp = await fetch(fullUrl);
+      var elapsed = Math.round(performance.now() - t0);
+      var text = await resp.text();
+      var sizeKb = (new Blob([text]).size / 1024).toFixed(1);
+
+      lastStatus = resp.status;
+      try { lastResponse = JSON.parse(text); } catch (_) { lastResponse = text; }
+
+      var sc = String(resp.status)[0];
+      el("respStatus").textContent = resp.status + " " + resp.statusText;
+      el("respStatus").className = "resp-status s" + sc;
+      el("respTime").textContent = elapsed + "ms";
+      el("respSize").textContent = sizeKb + " KB";
+      el("statusText").textContent = "Ready";
+
+      switchTab("pretty");
+      renderPrettyJson(lastResponse);
+      renderRawView(text);
+      renderTableView(lastResponse);
+      renderPagination(lastResponse);
+      addToHistory(currentEp, url, resp.status, elapsed);
+    } catch (err) {
+      var elapsed2 = Math.round(performance.now() - t0);
+      lastResponse = null; lastStatus = 0;
+      el("respStatus").textContent = "Error";
+      el("respStatus").className = "resp-status s5";
+      el("respTime").textContent = elapsed2 + "ms";
+      el("respSize").textContent = "";
+      el("respPretty").innerHTML = '<div class="error-msg">' + esc(err.message) + '</div>';
+      el("statusText").textContent = "Error";
+      addToHistory(currentEp, url, 0, elapsed2);
+    }
+    el("btnSend").disabled = false;
+  }
+
+  /* ---- JSON syntax highlighting ----------------------------------------- */
+
+  function highlight(json) {
+    if (typeof json !== "string") json = JSON.stringify(json, null, 2);
+    return json
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?/g, function (m) {
+        if (/:\s*$/.test(m)) return '<span class="json-key">' + m.replace(/:\s*$/, "") + '</span>:';
+        return '<span class="json-str">' + m + '</span>';
+      })
+      .replace(/\b(-?\d+\.?\d*([eE][+-]?\d+)?)\b/g, '<span class="json-num">$1</span>')
+      .replace(/\b(true|false)\b/g, '<span class="json-bool">$1</span>')
+      .replace(/\bnull\b/g, '<span class="json-null">null</span>');
+  }
+
+  function renderPrettyJson(data) { el("respPretty").innerHTML = highlight(data); }
+  function renderRawView(text) { el("respRaw").textContent = text; }
+
+  /* ---- table view ------------------------------------------------------- */
+
+  function renderTableView(data) {
+    var c = el("respTable");
+    var rows = [];
+    if (data && data.content && Array.isArray(data.content)) rows = data.content;
+    else if (Array.isArray(data)) rows = data;
+    else if (data && typeof data === "object") {
+      var h = "<table><tr><th>Key</th><th>Value</th></tr>";
+      Object.keys(data).forEach(function (k) {
+        var v = data[k];
+        if (typeof v === "object" && v !== null) v = JSON.stringify(v);
+        h += "<tr><td><strong>" + esc(k) + "</strong></td><td>" + esc(String(v)) + "</td></tr>";
+      });
+      c.innerHTML = h + "</table>"; return;
+    }
+    if (!rows.length) { c.innerHTML = '<p style="padding:16px;color:var(--muted)">No tabular data</p>'; return; }
+
+    var keys = Object.keys(rows[0]).filter(function (k) {
+      var v = rows[0][k]; return v === null || typeof v !== "object";
+    });
+    var h = "<table><tr>";
+    keys.forEach(function (k) { h += "<th>" + esc(k) + "</th>"; });
+    h += "</tr>";
+    rows.forEach(function (row) {
+      h += "<tr>";
+      keys.forEach(function (k) {
+        var v = row[k];
+        h += "<td>" + esc(v === null || v === undefined ? "" : String(v)) + "</td>";
+      });
+      h += "</tr>";
+    });
+    c.innerHTML = h + "</table>";
+  }
+
+  /* ---- tabs ------------------------------------------------------------- */
+
+  function switchTab(tab) {
+    var map = { pretty: "respPretty", raw: "respRaw", table: "respTable" };
+    Object.keys(map).forEach(function (t) {
+      var e = el(map[t]);
+      if (e) e.style.display = t === tab ? "" : "none";
+    });
+    document.querySelectorAll(".resp-tab").forEach(function (btn) {
+      btn.classList.toggle("active", btn.textContent.toLowerCase() === tab);
+    });
+  }
+
+  /* ---- pagination ------------------------------------------------------- */
+
+  function renderPagination(data) {
+    var pag = el("epPag");
+    if (!data || data.totalPages === undefined) { pag.innerHTML = ""; return; }
+    var pg = data.number || 0;
+    var tp = data.totalPages || 1;
+    pag.innerHTML =
+      '<button ' + (pg <= 0 ? "disabled" : "") + ' onclick="EP.send(' + (pg - 1) + ')">Prev</button>' +
+      '<span class="pg-info">Page ' + (pg + 1) + " / " + tp + " \u00b7 " + (data.totalElements || 0) + " total</span>" +
+      '<button ' + (pg >= tp - 1 ? "disabled" : "") + ' onclick="EP.send(' + (pg + 1) + ')">Next</button>';
+  }
+
+  /* ---- copy / export ---------------------------------------------------- */
+
+  function copyText(text, msg) {
+    if (navigator.clipboard) navigator.clipboard.writeText(text);
+    else { var t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); document.execCommand("copy"); document.body.removeChild(t); }
+    toast(msg || "Copied");
+  }
+
+  function copyUrl()  { copyText(BASE + buildUrl(), "URL copied"); }
+  function copyCurl() { copyText("curl -X GET '" + BASE + buildUrl() + "'", "cURL copied"); }
+  function copyJson() { if (!lastResponse) return toast("No response"); copyText(JSON.stringify(lastResponse, null, 2), "JSON copied"); }
+
+  function exportCsv() {
+    if (!lastResponse) return toast("No response");
+    var rows = lastResponse.content || (Array.isArray(lastResponse) ? lastResponse : [lastResponse]);
+    if (!rows.length) return toast("No data");
+    var allK = {};
+    rows.forEach(function (r) { Object.keys(r).forEach(function (k) { if (typeof r[k] !== "object" || r[k] === null) allK[k] = true; }); });
+    var keys = Object.keys(allK);
+    var csv = keys.join(",") + "\n";
+    rows.forEach(function (r) {
+      csv += keys.map(function (k) { var v = r[k]; if (v == null) return ""; return '"' + String(v).replace(/"/g, '""') + '"'; }).join(",") + "\n";
+    });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = (currentEp ? currentEp.id : "data") + ".csv";
+    a.click();
+    toast("CSV exported");
+  }
+
+  function toggleWrap() {
+    el("respPretty").classList.toggle("wrap");
+    el("respRaw").classList.toggle("wrap");
+  }
+
+  /* ---- request history -------------------------------------------------- */
+
+  function addToHistory(ep, url, status, ms) {
+    reqHistory.unshift({ ep: ep.id, name: ep.name, url: url, status: status, ms: ms });
+    if (reqHistory.length > 30) reqHistory.pop();
+    renderHistory();
+  }
+
+  function renderHistory() {
+    var nav = el("historyNav");
+    if (!reqHistory.length) { nav.innerHTML = '<span class="sidebar-empty">No requests yet</span>'; return; }
+    var h = "";
+    reqHistory.slice(0, 15).forEach(function (item, i) {
+      var sc = String(item.status)[0] || "5";
+      h += '<a href="#" onclick="EP.replay(' + i + ');return false"><span style="flex:1;overflow:hidden;text-overflow:ellipsis">' +
+        item.name + '</span><span class="hist-status s' + sc + '">' + (item.status || "ERR") + '</span></a>';
+    });
+    nav.innerHTML = h;
+  }
+
+  function replayHistory(idx) {
+    var h = reqHistory[idx];
+    if (h) goTo(h.ep);
+  }
+
+  /* ---- dashboard -------------------------------------------------------- */
 
   async function loadDashboard() {
-    var sid = shopSel();
-    try {
-      var results = await Promise.allSettled([
-        api("/api/customers?shop_id=" + sid + "&size=1"),
-        api("/api/vehicles?shop_id=" + sid + "&size=1"),
-        api("/api/repair-orders?shop_id=" + sid + "&size=5&sortDirection=DESC"),
-        api("/api/jobs?shop_id=" + sid + "&size=1"),
-        api("/api/appointments?shop_id=" + sid + "&size=5&sortDirection=DESC"),
-        api("/api/employees?shop_id=" + sid + "&size=1"),
-      ]);
+    var sid = el("shopSelect").value;
+    if (!sid) { console.warn("No shop selected"); return; }
+    var stats = el("dashStats");
+    stats.innerHTML = '<div class="loading-row" style="grid-column:1/-1"><div class="spinner"></div></div>';
 
-      function val(i) {
-        var r = results[i];
-        return r.status === "fulfilled" ? r.value : null;
-      }
+    var items = [
+      { key: "customers",    label: "Customers",     url: "/api/customers?shop_id=" + sid + "&size=1" },
+      { key: "vehicles",     label: "Vehicles",      url: "/api/vehicles?shop_id=" + sid + "&size=1" },
+      { key: "repair-orders",label: "Repair Orders",  url: "/api/repair-orders?shop_id=" + sid + "&size=5&sortDirection=DESC" },
+      { key: "jobs",         label: "Jobs",           url: "/api/jobs?shop_id=" + sid + "&size=1" },
+      { key: "appointments", label: "Appointments",   url: "/api/appointments?shop_id=" + sid + "&size=5&sortDirection=DESC" },
+      { key: "employees",    label: "Employees",      url: "/api/employees?shop_id=" + sid + "&size=1" },
+      { key: "canned-jobs",  label: "Canned Jobs",    url: "/api/canned-jobs?shop_id=" + sid + "&size=1" },
+      { key: "inventory",    label: "Inventory",      url: "/api/inventory?shop_id=" + sid + "&size=1&partTypeId=1" }
+    ];
 
-      $("dCust").textContent = val(0)?.totalElements ?? "\u2014";
-      $("dVeh").textContent = val(1)?.totalElements ?? "\u2014";
-      $("dRO").textContent = val(2)?.totalElements ?? "\u2014";
-      $("dJobs").textContent = val(3)?.totalElements ?? "\u2014";
-      $("dAppt").textContent = val(4)?.totalElements ?? "\u2014";
-      $("dEmp").textContent = val(5)?.totalElements ?? "\u2014";
+    var results = await Promise.allSettled(items.map(function (ep) {
+      return fetch(BASE + ep.url).then(function (r) { return r.json(); });
+    }));
 
-      var ros = val(2)?.content || [];
-      var roH = "<table><tr><th>RO #</th><th>Status</th><th>Customer</th><th>Created</th><th>Total</th><th></th></tr>";
-      ros.forEach(function (r) {
-        var st = r.repairOrderStatus?.name || "\u2014";
-        var cls = st.includes("Progress") ? "badge-orange" : st.includes("Complete") || st.includes("Posted") ? "badge-green" : "badge-gray";
-        roH += "<tr><td>" + r.repairOrderNumber + '</td><td><span class="badge ' + cls + '">' + st + "</span></td><td>" + (r.customerId || "\u2014") + "</td><td>" + d(r.createdDate) + "</td><td>" + cents(r.totalSales) + '</td><td><button class="btn btn-sm btn-outline" onclick="viewRO(' + r.id + ')">View</button></td></tr>';
-      });
-      roH += "</table>";
-      $("dashROTable").innerHTML = ros.length ? roH : '<p style="color:var(--muted)">No repair orders found.</p>';
-
-      var appts = val(4)?.content || [];
-      var aH = "<table><tr><th>ID</th><th>Start</th><th>End</th><th>Status</th><th>Description</th><th></th></tr>";
-      appts.forEach(function (a) {
-        var acls = a.appointmentStatus === "ARRIVED" ? "badge-green" : a.appointmentStatus === "CANCELED" ? "badge-red" : "badge-blue";
-        aH += "<tr><td>" + a.id + "</td><td>" + dt(a.startTime) + "</td><td>" + dt(a.endTime) + '</td><td><span class="badge ' + acls + '">' + (a.appointmentStatus || "NONE") + "</span></td><td>" + esc(a.description?.substring(0, 50)) + '</td><td><button class="btn btn-sm btn-outline" onclick="viewAppt(' + a.id + ')">View</button></td></tr>';
-      });
-      aH += "</table>";
-      $("dashApptTable").innerHTML = appts.length ? aH : '<p style="color:var(--muted)">No appointments found.</p>';
-    } catch (e) {
-      $("dashROTable").innerHTML = errHtml(e);
-    }
-  }
-  window.loadDashboard = loadDashboard;
-
-  // -- customers -------------------------------------------------------------
-
-  async function loadCustomers(pg) {
-    if (pg === undefined) pg = 0;
-    var sid = shopSel(), search = $("custSearch").value, ctype = $("custType").value, size = $("custSize").value;
-    var el = $("custTable");
-    el.innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
-    try {
-      var u = "/api/customers?shop_id=" + sid + "&size=" + size + "&page=" + pg;
-      if (search) u += "&search=" + encodeURIComponent(search);
-      if (ctype) u += "&customerTypeId=" + ctype;
-      var data = await api(u);
-      var rows = data.content || [];
-      var h = "<table><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Type</th><th>Created</th><th></th></tr>";
-      rows.forEach(function (c) {
-        var ph = Array.isArray(c.phone) ? c.phone.map(function (p) { return p.number; }).join(", ") : c.phone || "\u2014";
-        h += "<tr><td>" + c.id + "</td><td>" + esc(c.firstName) + " " + esc(c.lastName) + "</td><td>" + esc(c.email) + "</td><td>" + esc(ph) + "</td><td>" + (c.customerType?.name || "\u2014") + "</td><td>" + d(c.createdDate) + '</td><td><button class="btn btn-sm btn-outline" onclick="viewCust(' + c.id + ')">View</button></td></tr>';
-      });
-      h += "</table>";
-      el.innerHTML = rows.length ? h : '<p style="color:var(--muted)">No customers found.</p>';
-      paginate("custPag", pg, data.totalPages, "loadCustomers");
-    } catch (e) { el.innerHTML = errHtml(e); }
-  }
-  window.loadCustomers = loadCustomers;
-
-  // -- vehicles --------------------------------------------------------------
-
-  async function loadVehicles(pg) {
-    if (pg === undefined) pg = 0;
-    var sid = shopSel(), search = $("vehSearch").value, custId = $("vehCustId").value, size = $("vehSize").value;
-    var el = $("vehTable");
-    el.innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
-    try {
-      var u = "/api/vehicles?shop_id=" + sid + "&size=" + size + "&page=" + pg;
-      if (search) u += "&search=" + encodeURIComponent(search);
-      if (custId) u += "&customerId=" + custId;
-      var data = await api(u);
-      var rows = data.content || [];
-      var h = "<table><tr><th>ID</th><th>Year</th><th>Make</th><th>Model</th><th>VIN</th><th>Plate</th><th>Customer</th><th></th></tr>";
-      rows.forEach(function (v) {
-        h += "<tr><td>" + v.id + "</td><td>" + (v.year || "\u2014") + "</td><td>" + esc(v.make) + "</td><td>" + esc(v.model) + "</td><td>" + esc(v.vin) + "</td><td>" + esc(v.licensePlate) + "</td><td>" + (v.customerId || "\u2014") + '</td><td><button class="btn btn-sm btn-outline" onclick="viewVeh(' + v.id + ')">View</button></td></tr>';
-      });
-      h += "</table>";
-      el.innerHTML = rows.length ? h : '<p style="color:var(--muted)">No vehicles found.</p>';
-      paginate("vehPag", pg, data.totalPages, "loadVehicles");
-    } catch (e) { el.innerHTML = errHtml(e); }
-  }
-  window.loadVehicles = loadVehicles;
-
-  // -- repair orders ---------------------------------------------------------
-
-  async function loadRepairOrders(pg) {
-    if (pg === undefined) pg = 0;
-    var sid = shopSel(), search = $("roSearch").value, status = $("roStatus").value, start = $("roStart").value, end = $("roEnd").value, size = $("roSize").value;
-    var el = $("roTable");
-    el.innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
-    try {
-      var u = "/api/repair-orders?shop_id=" + sid + "&size=" + size + "&page=" + pg + "&sortDirection=DESC";
-      if (search) u += "&search=" + encodeURIComponent(search);
-      if (status) u += "&repairOrderStatusId=" + status;
-      if (start) u += "&start=" + start;
-      if (end) u += "&end=" + end;
-      var data = await api(u);
-      var rows = data.content || [];
-      var h = "<table><tr><th>RO #</th><th>Status</th><th>Customer</th><th>Vehicle</th><th>Labor</th><th>Parts</th><th>Total</th><th>Created</th><th></th></tr>";
-      rows.forEach(function (r) {
-        var st = r.repairOrderStatus?.name || "\u2014";
-        var cls = st.includes("Progress") ? "badge-orange" : st.includes("Complete") || st.includes("Posted") ? "badge-green" : "badge-gray";
-        h += "<tr><td>" + r.repairOrderNumber + '</td><td><span class="badge ' + cls + '">' + st + "</span></td><td>" + (r.customerId || "\u2014") + "</td><td>" + (r.vehicleId || "\u2014") + "</td><td>" + cents(r.laborSales) + "</td><td>" + cents(r.partsSales) + "</td><td>" + cents(r.totalSales) + "</td><td>" + d(r.createdDate) + '</td><td><button class="btn btn-sm btn-outline" onclick="viewRO(' + r.id + ')">View</button></td></tr>';
-      });
-      h += "</table>";
-      el.innerHTML = rows.length ? h : '<p style="color:var(--muted)">No repair orders found.</p>';
-      paginate("roPag", pg, data.totalPages, "loadRepairOrders");
-    } catch (e) { el.innerHTML = errHtml(e); }
-  }
-  window.loadRepairOrders = loadRepairOrders;
-
-  // -- jobs ------------------------------------------------------------------
-
-  async function loadJobs(pg) {
-    if (pg === undefined) pg = 0;
-    var sid = shopSel(), roId = $("jobROId").value, auth = $("jobAuth").value, roSt = $("jobROStatus").value, size = $("jobSize").value;
-    var el = $("jobTable");
-    el.innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
-    try {
-      var u = "/api/jobs?shop_id=" + sid + "&size=" + size + "&page=" + pg;
-      if (roId) u += "&repairOrderId=" + roId;
-      if (auth) u += "&authorized=" + auth;
-      if (roSt) u += "&repairOrderStatusId=" + roSt;
-      var data = await api(u);
-      var rows = data.content || [];
-      var h = "<table><tr><th>ID</th><th>Name</th><th>RO ID</th><th>Auth</th><th>Parts</th><th>Labor</th><th>Subtotal</th><th>Created</th><th></th></tr>";
-      rows.forEach(function (j) {
-        var ab = j.authorized === true ? '<span class="badge badge-green">Yes</span>' : j.authorized === false ? '<span class="badge badge-red">No</span>' : '<span class="badge badge-gray">\u2014</span>';
-        h += "<tr><td>" + j.id + "</td><td>" + esc(j.name) + "</td><td>" + (j.repairOrderId || "\u2014") + "</td><td>" + ab + "</td><td>" + cents(j.partsTotal) + "</td><td>" + cents(j.laborTotal) + "</td><td>" + cents(j.subtotal) + "</td><td>" + d(j.createdDate) + '</td><td><button class="btn btn-sm btn-outline" onclick="viewJob(' + j.id + ')">View</button></td></tr>';
-      });
-      h += "</table>";
-      el.innerHTML = rows.length ? h : '<p style="color:var(--muted)">No jobs found.</p>';
-      paginate("jobPag", pg, data.totalPages, "loadJobs");
-    } catch (e) { el.innerHTML = errHtml(e); }
-  }
-  window.loadJobs = loadJobs;
-
-  // -- canned jobs -----------------------------------------------------------
-
-  async function loadCannedJobs(pg) {
-    if (pg === undefined) pg = 0;
-    var sid = shopSel(), search = $("cjSearch").value, size = $("cjSize").value;
-    var el = $("cjTable");
-    el.innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
-    try {
-      var u = "/api/canned-jobs?shop_id=" + sid + "&size=" + size + "&page=" + pg;
-      if (search) u += "&search=" + encodeURIComponent(search);
-      var data = await api(u);
-      var rows = data.content || [];
-      var h = "<table><tr><th>ID</th><th>Name</th><th>Category</th><th>Cost</th><th>Labor</th><th>Parts</th><th></th></tr>";
-      rows.forEach(function (c) {
-        h += "<tr><td>" + c.id + "</td><td>" + esc(c.name) + "</td><td>" + (esc(c.jobCategoryCode) || "\u2014") + "</td><td>" + cents(c.totalCost) + "</td><td>" + (c.labor || []).length + "</td><td>" + (c.parts || []).length + '</td><td><button class="btn btn-sm btn-outline" onclick="viewCannedJob(' + c.id + ')">View</button></td></tr>';
-      });
-      h += "</table>";
-      el.innerHTML = rows.length ? h : '<p style="color:var(--muted)">No canned jobs found.</p>';
-      paginate("cjPag", pg, data.totalPages, "loadCannedJobs");
-    } catch (e) { el.innerHTML = errHtml(e); }
-  }
-  window.loadCannedJobs = loadCannedJobs;
-
-  window.viewCannedJob = function (id) {
-    api("/api/canned-jobs?shop_id=" + shopSel() + "&size=100").then(function (data) {
-      var found = (data.content || []).find(function (c) { return c.id === id; });
-      if (found) showDetail("Canned Job #" + id, found);
-    }).catch(function () {});
-  };
-
-  // -- appointments ----------------------------------------------------------
-
-  async function loadAppointments(pg) {
-    if (pg === undefined) pg = 0;
-    var sid = shopSel(), start = $("apptStart").value, end = $("apptEnd").value, custId = $("apptCustId").value, size = $("apptSize").value;
-    var el = $("apptTable");
-    el.innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
-    try {
-      var u = "/api/appointments?shop_id=" + sid + "&size=" + size + "&page=" + pg;
-      if (start) u += "&start=" + start;
-      if (end) u += "&end=" + end;
-      if (custId) u += "&customerId=" + custId;
-      var data = await api(u);
-      var rows = data.content || [];
-      var h = "<table><tr><th>ID</th><th>Start</th><th>End</th><th>Status</th><th>Customer</th><th>Vehicle</th><th>Description</th><th></th></tr>";
-      rows.forEach(function (a) {
-        var cls = a.appointmentStatus === "ARRIVED" ? "badge-green" : a.appointmentStatus === "CANCELED" ? "badge-red" : a.appointmentStatus === "NO_SHOW" ? "badge-orange" : "badge-blue";
-        h += "<tr><td>" + a.id + "</td><td>" + dt(a.startTime) + "</td><td>" + dt(a.endTime) + '</td><td><span class="badge ' + cls + '">' + (a.appointmentStatus || "NONE") + "</span></td><td>" + (a.customerId || "\u2014") + "</td><td>" + (a.vehicleId || "\u2014") + "</td><td>" + esc(a.description?.substring(0, 60)) + '</td><td><button class="btn btn-sm btn-outline" onclick="viewAppt(' + a.id + ')">View</button></td></tr>';
-      });
-      h += "</table>";
-      el.innerHTML = rows.length ? h : '<p style="color:var(--muted)">No appointments found.</p>';
-      paginate("apptPag", pg, data.totalPages, "loadAppointments");
-    } catch (e) { el.innerHTML = errHtml(e); }
-  }
-  window.loadAppointments = loadAppointments;
-
-  // -- calendar --------------------------------------------------------------
-
-  var calYear, calMonth;
-
-  function initCalendar() {
-    var now = new Date();
-    calYear = now.getFullYear();
-    calMonth = now.getMonth();
-    renderCalendar();
-  }
-  window.initCalendar = initCalendar;
-
-  window.calNav = function (dir) {
-    calMonth += dir;
-    if (calMonth > 11) { calMonth = 0; calYear++; }
-    if (calMonth < 0) { calMonth = 11; calYear--; }
-    renderCalendar();
-  };
-  window.calToday = function () {
-    var n = new Date();
-    calYear = n.getFullYear();
-    calMonth = n.getMonth();
-    renderCalendar();
-  };
-
-  async function renderCalendar() {
-    var months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    $("calTitle").textContent = months[calMonth] + " " + calYear;
-    var sid = shopSel();
-    var firstDay = new Date(calYear, calMonth, 1);
-    var lastDay = new Date(calYear, calMonth + 1, 0);
-    var startPad = firstDay.getDay();
-    var totalDays = lastDay.getDate();
-    var startStr = calYear + "-" + String(calMonth + 1).padStart(2, "0") + "-01";
-    var endStr = calYear + "-" + String(calMonth + 1).padStart(2, "0") + "-" + String(totalDays).padStart(2, "0");
-
-    var apptMap = {};
-    try {
-      var data = await api("/api/appointments?shop_id=" + sid + "&start=" + startStr + "&end=" + endStr + "&size=100");
-      (data.content || []).forEach(function (a) {
-        if (!a.startTime) return;
-        var key = a.startTime.substring(0, 10);
-        if (!apptMap[key]) apptMap[key] = [];
-        apptMap[key].push(a);
-      });
-    } catch (e) { /* calendar degrades gracefully */ }
-
-    var today = new Date();
-    var todayStr = today.toISOString().substring(0, 10);
-    var html = '<div class="cal-grid">';
-    ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].forEach(function (d) {
-      html += '<div class="cal-header">' + d + "</div>";
+    var sh = "";
+    items.forEach(function (item, i) {
+      var r = results[i];
+      var count = r.status === "fulfilled" && r.value ? (r.value.totalElements != null ? r.value.totalElements : "?") : "\u2014";
+      sh += '<div class="stat-card" onclick="EP.go(\'' + item.key + '\')">' +
+        '<div class="label">' + item.label + '</div><div class="value">' + count + '</div>' +
+        '<div class="sub">Click to explore</div></div>';
     });
+    stats.innerHTML = sh;
 
-    for (var i = 0; i < startPad; i++) {
-      var prev = new Date(calYear, calMonth, 0 - startPad + i + 1);
-      html += '<div class="cal-day other-month"><div class="day-num">' + prev.getDate() + "</div></div>";
+    renderDashTable("dashRO", results[2], ["repairOrderNumber", "repairOrderStatus.name", "customerId", "createdDate", "totalSales"]);
+    renderDashTable("dashAppt", results[4], ["id", "startTime", "appointmentStatus", "description"]);
+    el("statusText").textContent = "Ready";
+  }
+
+  function renderDashTable(containerId, result, fields) {
+    var c = el(containerId);
+    if (!result || result.status !== "fulfilled" || !result.value || !result.value.content || !result.value.content.length) {
+      c.innerHTML = '<p style="padding:16px;color:var(--muted)">No data</p>'; return;
+    }
+    var rows = result.value.content;
+    var h = "<table><tr>";
+    fields.forEach(function (f) { h += "<th>" + f.split(".").pop() + "</th>"; });
+    h += "</tr>";
+    rows.forEach(function (row) {
+      h += "<tr>";
+      fields.forEach(function (f) {
+        var v = f.split(".").reduce(function (o, k) { return o && o[k]; }, row);
+        if (f.indexOf("Date") >= 0 || f.indexOf("Time") >= 0) v = fmtDt(v);
+        else if (f === "totalSales") v = fmtCents(v);
+        h += "<td>" + esc(v) + "</td>";
+      });
+      h += "</tr>";
+    });
+    c.innerHTML = h + "</table>";
+  }
+
+  /* ---- util ------------------------------------------------------------- */
+
+  function esc(s) { return s != null ? String(s).replace(/</g, "&lt;") : "\u2014"; }
+  function fmtDt(v) { if (!v) return "\u2014"; var d = new Date(v); return d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
+  function fmtCents(v) { return v != null ? "$" + (v / 100).toFixed(2) : "\u2014"; }
+
+  function clearResponse() {
+    el("respPretty").innerHTML = '<span class="resp-placeholder">Click "Send Request" to execute</span>';
+    el("respRaw").textContent = "";
+    el("respTable").innerHTML = "";
+    el("respStatus").textContent = ""; el("respStatus").className = "resp-status";
+    el("respTime").textContent = ""; el("respSize").textContent = "";
+    el("epPag").innerHTML = "";
+    lastResponse = null; lastStatus = 0;
+  }
+
+  function toast(msg) {
+    var t = el("toast");
+    t.textContent = msg; t.classList.add("show");
+    setTimeout(function () { t.classList.remove("show"); }, 2000);
+  }
+
+  /* ---- mobile sidebar --------------------------------------------------- */
+
+  var sidebar = document.querySelector(".sidebar");
+  var overlay = document.querySelector(".sidebar-overlay");
+  var burger = document.querySelector(".hamburger");
+
+  function closeSidebar() {
+    if (sidebar) sidebar.classList.remove("open");
+    if (overlay) overlay.classList.remove("show");
+  }
+  if (burger) burger.addEventListener("click", function () {
+    sidebar.classList.add("open"); overlay.classList.add("show");
+  });
+  if (overlay) overlay.addEventListener("click", closeSidebar);
+
+  /* ---- topbar shop sync ------------------------------------------------- */
+
+  el("shopSelect").addEventListener("change", function () {
+    var sp = el("p_shop_id");
+    if (sp) sp.value = this.value;
+    updateUrlPreview();
+    var active = document.querySelector(".page.active");
+    if (active && active.id === "page-dashboard") loadDashboard();
+  });
+
+  /* ---- boot ------------------------------------------------------------- */
+
+  async function boot() {
+    console.log("[API Explorer] booting...");
+    buildNav();
+
+    try {
+      var resp = await fetch(BASE + "/api/shops");
+      var data = await resp.json();
+      shops = data.shops || [];
+      console.log("[API Explorer] loaded", shops.length, "shops");
+    } catch (e) {
+      console.error("[API Explorer] failed to load shops:", e);
+      shops = [];
     }
 
-    for (var day = 1; day <= totalDays; day++) {
-      var key = calYear + "-" + String(calMonth + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
-      var isToday = key === todayStr ? " today" : "";
-      var dayAppts = apptMap[key] || [];
-      var dots = "";
-      dayAppts.slice(0, 5).forEach(function (a) {
-        var col = a.appointmentStatus === "ARRIVED" ? "var(--green)" : a.appointmentStatus === "CANCELED" ? "var(--red)" : "var(--sky)";
-        dots += '<span class="appt-dot" style="background:' + col + '"></span>';
-      });
-      if (dayAppts.length > 5) dots += '<span style="font-size:10px;color:var(--muted)">+' + (dayAppts.length - 5) + "</span>";
-      html += '<div class="cal-day' + isToday + '" onclick="calDayClick(\'' + key + "')\" title=\"" + dayAppts.length + ' appointment(s)"><div class="day-num">' + day + "</div>" + dots + "</div>";
-    }
-
-    var remaining = (startPad + totalDays) % 7;
-    if (remaining > 0) {
-      for (var j = 1; j <= 7 - remaining; j++) {
-        html += '<div class="cal-day other-month"><div class="day-num">' + j + "</div></div>";
-      }
-    }
-    html += "</div>";
-    $("calBody").innerHTML = html;
-  }
-
-  window.calDayClick = function (dateStr) {
-    $("apptStart").value = dateStr;
-    $("apptEnd").value = dateStr;
-    showPage("appointments");
-    loadAppointments();
-  };
-
-  // -- employees -------------------------------------------------------------
-
-  async function loadEmployees(pg) {
-    if (pg === undefined) pg = 0;
-    var sid = shopSel(), search = $("empSearch").value, size = $("empSize").value;
-    var el = $("empTable");
-    el.innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
-    try {
-      var u = "/api/employees?shop_id=" + sid + "&size=" + size + "&page=" + pg;
-      if (search) u += "&search=" + encodeURIComponent(search);
-      var data = await api(u);
-      var rows = data.content || [];
-      var h = "<table><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Can Work</th><th></th></tr>";
-      rows.forEach(function (e) {
-        h += "<tr><td>" + e.id + "</td><td>" + esc(e.firstName) + " " + esc(e.lastName) + "</td><td>" + esc(e.email) + "</td><td>" + (e.employeeRole?.name || "\u2014") + "</td><td>" + (e.canPerformWork ? '<span class="badge badge-green">Yes</span>' : '<span class="badge badge-gray">No</span>') + '</td><td><button class="btn btn-sm btn-outline" onclick="viewEmp(' + e.id + ')">View</button></td></tr>';
-      });
-      h += "</table>";
-      el.innerHTML = rows.length ? h : '<p style="color:var(--muted)">No employees found.</p>';
-      paginate("empPag", pg, data.totalPages, "loadEmployees");
-    } catch (e) { el.innerHTML = errHtml(e); }
-  }
-  window.loadEmployees = loadEmployees;
-
-  // -- inventory -------------------------------------------------------------
-
-  async function loadInventory(pg) {
-    if (pg === undefined) pg = 0;
-    var sid = shopSel(), partType = $("invType").value, partNum = $("invPartNum").value, size = $("invSize").value;
-    var el = $("invTable");
-    el.innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
-    try {
-      var u = "/api/inventory?shop_id=" + sid + "&partTypeId=" + partType + "&size=" + size + "&page=" + pg;
-      if (partNum) u += "&partNumbers=" + encodeURIComponent(partNum);
-      var data = await api(u);
-      var rows = data.content || [];
-      var h = "<table><tr><th>ID</th><th>Name</th><th>Brand</th><th>Part #</th><th>Cost</th><th>Retail</th><th>In Stock</th><th>Available</th></tr>";
-      rows.forEach(function (p) {
-        h += "<tr><td>" + p.id + "</td><td>" + esc(p.name) + "</td><td>" + esc(p.brand) + "</td><td>" + esc(p.partNumber) + "</td><td>" + cents(p.cost) + "</td><td>" + cents(p.retail) + "</td><td>" + (p.inStock ?? "\u2014") + "</td><td>" + (p.available ?? "\u2014") + "</td></tr>";
-      });
-      h += "</table>";
-      el.innerHTML = rows.length ? h : '<p style="color:var(--muted)">No inventory found.</p>';
-      paginate("invPag", pg, data.totalPages, "loadInventory");
-    } catch (e) { el.innerHTML = errHtml(e); }
-  }
-  window.loadInventory = loadInventory;
-
-  // -- cross-shop search -----------------------------------------------------
-
-  async function crossSearch() {
-    var email = $("csEmail").value, phone = $("csPhone").value;
-    var el = $("csResult");
-    if (!email && !phone) { el.innerHTML = '<div class="error-msg">Provide email or phone.</div>'; return; }
-    el.innerHTML = '<div class="loading-row"><div class="spinner"></div> Searching all shops\u2026</div>';
-    try {
-      var u = "/api/customer/search?";
-      if (email) u += "email=" + encodeURIComponent(email);
-      if (phone) u += (email ? "&" : "") + "phone=" + encodeURIComponent(phone);
-      var data = await api(u);
-      if (!data.customer_found) { el.innerHTML = '<div class="panel"><div class="panel-body"><p style="color:var(--muted)">No customer found across any shop.</p></div></div>'; return; }
-
-      var h = '<div class="stat-row" style="margin-top:14px"><div class="stat-card"><div class="label">Name</div><div class="value" style="font-size:18px">' + esc(data.customer_name) + '</div></div><div class="stat-card"><div class="label">Found At</div><div class="value">' + (data.found_at_shops?.length || 0) + ' shops</div></div><div class="stat-card"><div class="label">Appointments</div><div class="value">' + (data.total_appointments || 0) + "</div></div></div>";
-
-      if (data.found_at_shops?.length) {
-        h += '<div class="panel"><div class="panel-header"><h3>Locations</h3></div><div class="panel-body"><table><tr><th>Shop</th><th>Shop ID</th><th>Customer ID</th></tr>';
-        data.found_at_shops.forEach(function (s) { h += "<tr><td>" + esc(s.shop_name) + "</td><td>" + s.shop_id + "</td><td>" + s.customer_id + "</td></tr>"; });
-        h += "</table></div></div>";
-      }
-      if (data.appointments?.length) {
-        h += '<div class="panel"><div class="panel-header"><h3>Active Appointments (' + data.appointments.length + ')</h3></div><div class="panel-body"><table><tr><th>Date</th><th>Service</th><th>Location</th><th>Status</th></tr>';
-        data.appointments.forEach(function (a) {
-          var cls = a.status === "ARRIVED" ? "badge-green" : "badge-blue";
-          h += "<tr><td>" + dt(a.date) + "</td><td>" + esc(a.service) + "</td><td>" + esc(a.location) + '</td><td><span class="badge ' + cls + '">' + a.status + "</span></td></tr>";
-        });
-        h += "</table></div></div>";
-      }
-      if (data.canceled_appointments?.length) {
-        h += '<div class="panel"><div class="panel-header"><h3>Canceled (' + data.canceled_appointments.length + ')</h3></div><div class="panel-body"><table><tr><th>Date</th><th>Service</th><th>Location</th></tr>';
-        data.canceled_appointments.forEach(function (a) { h += "<tr><td>" + dt(a.date) + "</td><td>" + esc(a.service) + "</td><td>" + esc(a.location) + "</td></tr>"; });
-        h += "</table></div></div>";
-      }
-      el.innerHTML = h;
-    } catch (e) { el.innerHTML = errHtml(e); }
-  }
-  window.crossSearch = crossSearch;
-
-  // -- shops -----------------------------------------------------------------
-
-  function loadShopCards() {
-    api("/api/shops").then(function (data) {
-      var el = $("shopCards");
-      var h = "";
-      (data.shops || []).forEach(function (s) {
-        h += '<div class="stat-card" style="cursor:pointer" onclick="viewShopDetail(' + s.shop_id + ')"><div class="label">' + esc(s.name) + '</div><div class="value" style="font-size:16px">#' + s.shop_id + '</div><p style="font-size:11px;color:var(--muted);margin-top:4px">' + esc(s.address) + "</p></div>";
-      });
-      el.innerHTML = h;
-    }).catch(function () {});
-  }
-  window.loadShopCards = loadShopCards;
-
-  window.loadTekShops = function () {
-    var el = $("tekShopData");
-    el.innerHTML = '<div class="loading-row"><div class="spinner"></div></div>';
-    api("/api/shops/tekmetric").then(function (data) {
-      el.innerHTML = "<pre>" + JSON.stringify(data, null, 2) + "</pre>";
-    }).catch(function (e) { el.innerHTML = errHtml(e); });
-  };
-
-  // -- boot ------------------------------------------------------------------
-
-  async function loadShopSelector() {
-    try {
-      var data = await api("/api/shops");
-      var sel = $("shopSelect");
-      sel.innerHTML = "";
-      (data.shops || []).forEach(function (s) {
+    var sel = el("shopSelect");
+    sel.innerHTML = "";
+    if (!shops.length) {
+      sel.innerHTML = '<option value="">No shops found</option>';
+    } else {
+      shops.forEach(function (s) {
         var opt = document.createElement("option");
         opt.value = s.shop_id;
         opt.textContent = s.name + " (" + s.shop_id + ")";
         sel.appendChild(opt);
       });
-    } catch (e) {
-      $("shopSelect").innerHTML = '<option value="">Failed to load shops</option>';
     }
+
+    goTo("dashboard");
+    console.log("[API Explorer] ready");
   }
 
-  loadShopSelector().then(function () {
-    showPage("dashboard");
-  });
+  boot();
+
+  /* ---- public API ------------------------------------------------------- */
+
+  window.EP = {
+    go: goTo,
+    send: sendRequest,
+    updUrl: updateUrlPreview,
+    copyUrl: copyUrl,
+    copyCurl: copyCurl,
+    copyJson: copyJson,
+    exportCsv: exportCsv,
+    toggleWrap: toggleWrap,
+    showTab: switchTab,
+    replay: replayHistory
+  };
+
 })();
