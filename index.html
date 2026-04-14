@@ -4,123 +4,156 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Tekmetric API Explorer</title>
-<link rel="stylesheet" href="css/style.css?v=2">
+<link rel="stylesheet" href="css/style.css?v=3">
 </head>
 <body>
 
-<!-- HAMBURGER (mobile) -->
 <button class="hamburger" aria-label="Menu">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
 </button>
 <div class="sidebar-overlay"></div>
 
 <div class="app-shell">
 
-<!-- SIDEBAR -->
+<!-- SIDEBAR — structured like api.tekmetric.com -->
 <aside class="sidebar">
   <div class="logo">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-    <div>Tekmetric<span class="logo-sub">API Explorer</span></div>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+    <div>Tekmetric API<span class="logo-sub">Explorer</span></div>
   </div>
 
-  <div class="section-label">Global</div>
-  <nav>
-    <a href="#" data-ep="dashboard" class="active" onclick="EP.nav('dashboard')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-      <span>Dashboard</span>
-    </a>
-  </nav>
-
-  <div class="section-label">Endpoints</div>
-  <nav id="endpointNav"></nav>
-
-  <div class="section-label">History</div>
-  <nav id="historyNav">
-    <span class="sidebar-empty">No requests yet</span>
+  <nav class="side-nav" id="sideNav">
+    <div class="nav-group">
+      <div class="nav-heading">General</div>
+      <a data-ep="dashboard" class="active">Dashboard</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-heading">API</div>
+      <a data-ep="shops-config">Shops</a>
+      <a data-ep="shop-detail" class="sub">Shop</a>
+      <a data-ep="shops-tek" class="sub">Shops (Tekmetric)</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-heading">Customers</div>
+      <a data-ep="customers">Customers</a>
+      <a data-ep="customer-detail" class="sub">Customer</a>
+      <a data-ep="customer-search" class="sub">Cross-Shop Search</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-heading">Repair Orders</div>
+      <a data-ep="repair-orders">Repair Orders</a>
+      <a data-ep="ro-detail" class="sub">Repair Order</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-heading">Jobs</div>
+      <a data-ep="jobs">Jobs</a>
+      <a data-ep="job-detail" class="sub">Job</a>
+      <a data-ep="canned-jobs" class="sub">Canned Jobs</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-heading">Vehicles</div>
+      <a data-ep="vehicles">Vehicles</a>
+      <a data-ep="vehicle-detail" class="sub">Vehicle</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-heading">Appointments</div>
+      <a data-ep="appointments">Appointments</a>
+      <a data-ep="appt-detail" class="sub">Appointment</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-heading">Employees</div>
+      <a data-ep="employees">Employees</a>
+      <a data-ep="emp-detail" class="sub">Employee</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-heading">Inventory</div>
+      <a data-ep="inventory">Inventory <span class="beta-tag">Beta</span></a>
+    </div>
   </nav>
 </aside>
 
 <!-- MAIN -->
 <div class="main">
 
+<!-- Topbar -->
 <div class="topbar">
   <span class="topbar-label">Shop</span>
   <select id="shopSelect"></select>
-  <span class="tag">READ-ONLY</span>
+  <span class="tag-ro">READ-ONLY</span>
   <span class="spacer"></span>
   <span class="status" id="statusText">Ready</span>
 </div>
 
 <div class="content">
 
-<!-- DASHBOARD -->
+<!-- Dashboard page -->
 <div id="page-dashboard" class="page active">
   <h2 class="page-title">API Dashboard</h2>
+  <p class="page-desc">Overview of all data available for the selected shop. Click any card to explore that endpoint.</p>
   <div class="stat-row" id="dashStats"></div>
   <div class="two-col">
-    <div class="panel"><div class="panel-header"><h3>Recent Repair Orders</h3></div><div class="panel-body" id="dashRO"><div class="loading-row"><div class="spinner"></div></div></div></div>
-    <div class="panel"><div class="panel-header"><h3>Upcoming Appointments</h3></div><div class="panel-body" id="dashAppt"><div class="loading-row"><div class="spinner"></div></div></div></div>
+    <div class="panel"><div class="panel-hd"><h3>Recent Repair Orders</h3></div><div class="panel-bd" id="dashRO"></div></div>
+    <div class="panel"><div class="panel-hd"><h3>Upcoming Appointments</h3></div><div class="panel-bd" id="dashAppt"></div></div>
   </div>
 </div>
 
-<!-- ENDPOINT EXPLORER (dynamic) -->
+<!-- Explorer page (all endpoints render here) -->
 <div id="page-explorer" class="page">
-  <div class="explorer-header">
-    <span class="method-badge">GET</span>
-    <h2 class="page-title" id="epTitle">Endpoint</h2>
+  <div class="ep-header">
+    <span class="method-pill">GET</span>
+    <h2 class="page-title" id="epTitle"></h2>
   </div>
-  <p class="ep-desc" id="epDesc"></p>
+  <p class="page-desc" id="epDesc"></p>
 
-  <!-- Request builder -->
-  <div class="panel req-panel">
-    <div class="panel-header">
-      <h3>Request Builder</h3>
+  <!-- Request Parameters -->
+  <div class="panel">
+    <div class="panel-hd">
+      <h3>Request Parameters</h3>
       <button class="btn btn-primary" id="btnSend" onclick="EP.send()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        Send Request
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Send
       </button>
     </div>
-    <div class="panel-body param-grid" id="paramGrid"></div>
+    <div class="param-grid" id="paramGrid"></div>
   </div>
 
-  <!-- URL preview -->
+  <!-- Request URL -->
   <div class="url-bar">
-    <span class="url-method">GET</span>
-    <code id="urlPreview">/api/...</code>
-    <button class="btn btn-sm btn-outline" onclick="EP.copyUrl()" title="Copy URL">
+    <span class="url-label">GET</span>
+    <code id="urlPreview"></code>
+    <button class="url-btn" onclick="EP.copyUrl()" title="Copy URL">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
     </button>
-    <button class="btn btn-sm btn-outline" onclick="EP.copyCurl()" title="Copy as cURL">cURL</button>
+    <button class="url-btn" onclick="EP.copyCurl()" title="Copy cURL">cURL</button>
   </div>
 
   <!-- Response -->
   <div class="panel resp-panel">
-    <div class="panel-header">
-      <h3>Response</h3>
-      <div class="resp-meta">
-        <span class="resp-status" id="respStatus"></span>
-        <span class="resp-time" id="respTime"></span>
-        <span class="resp-size" id="respSize"></span>
+    <div class="panel-hd resp-hd">
+      <div class="resp-info">
+        <h3>Response</h3>
+        <span class="resp-badge" id="respStatus"></span>
+        <span class="resp-meta" id="respTime"></span>
+        <span class="resp-meta" id="respSize"></span>
       </div>
-      <div class="resp-actions">
-        <button class="btn btn-sm btn-outline" onclick="EP.copyJson()">Copy JSON</button>
-        <button class="btn btn-sm btn-outline" onclick="EP.exportCsv()">Export CSV</button>
-        <button class="btn btn-sm btn-outline" onclick="EP.toggleWrap()" id="btnWrap">Wrap</button>
+      <div class="resp-btns">
+        <button class="btn btn-xs" onclick="EP.copyJson()">Copy JSON</button>
+        <button class="btn btn-xs" onclick="EP.exportCsv()">CSV</button>
+        <button class="btn btn-xs" onclick="EP.toggleWrap()" id="btnWrap">Wrap</button>
       </div>
     </div>
-    <div class="panel-body resp-body">
-      <div class="resp-tabs">
-        <button class="resp-tab active" onclick="EP.showTab('pretty')">Pretty</button>
-        <button class="resp-tab" onclick="EP.showTab('raw')">Raw</button>
-        <button class="resp-tab" onclick="EP.showTab('table')">Table</button>
-      </div>
-      <pre id="respPretty" class="resp-pre"><span class="resp-placeholder">Click "Send Request" to execute</span></pre>
-      <pre id="respRaw" class="resp-pre" style="display:none"></pre>
-      <div id="respTable" class="resp-table-wrap" style="display:none"></div>
+    <div class="resp-tabs">
+      <button class="tab active" onclick="EP.tab('pretty')">Pretty</button>
+      <button class="tab" onclick="EP.tab('raw')">Raw</button>
+      <button class="tab" onclick="EP.tab('table')">Table</button>
+    </div>
+    <div class="panel-bd resp-body">
+      <pre id="respPretty" class="resp-pre"><span class="placeholder">Send a request to see the response</span></pre>
+      <pre id="respRaw" class="resp-pre hidden"></pre>
+      <div id="respTable" class="resp-tbl hidden"></div>
     </div>
   </div>
 
-  <!-- Pagination -->
   <div class="pagination" id="epPag"></div>
 </div>
 
@@ -133,6 +166,6 @@
 <script>
   window.API_BASE = "https://tekmetricapienpoints-production.up.railway.app";
 </script>
-<script src="js/app.js?v=2"></script>
+<script src="js/app.js?v=3"></script>
 </body>
 </html>
