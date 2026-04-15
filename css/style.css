@@ -154,7 +154,7 @@ body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;background:var(--
 .resp-pre{padding:14px;margin:0;font-family:var(--mono);font-size:11px;line-height:1.6;overflow-x:auto;max-height:550px;background:#fafcff;white-space:pre;tab-size:2}
 .resp-pre.wrap{white-space:pre-wrap;word-break:break-all}
 .placeholder{color:var(--muted);font-style:italic;font-family:inherit}
-.resp-tbl{overflow:auto;max-height:550px}
+.resp-tbl{overflow:auto;max-height:700px}
 
 .json-key{color:#0b6fad}.json-str{color:#16a34a}.json-num{color:#d97706}.json-bool{color:#7c3aed}.json-null{color:#94a3b8}
 
@@ -178,6 +178,14 @@ th{text-align:left;padding:8px 12px;background:var(--sky-lt);color:var(--accent)
 td{padding:8px 12px;border-bottom:1px solid var(--border);white-space:nowrap}
 tr{transition:background .1s}
 tr:hover td{background:#edf4fc}
+
+/* ---- nested sub-tables ---- */
+td.nested-cell{white-space:normal;padding:6px 8px;vertical-align:top;max-width:460px}
+table.sub-tbl{width:100%;border-collapse:collapse;margin:2px 0;border:1px solid var(--border);border-radius:6px;overflow:hidden;font-size:11px}
+table.sub-tbl th{padding:4px 8px;background:#eef4fb;color:var(--sky-dk);font-size:9px;letter-spacing:.5px;position:static}
+table.sub-tbl td{padding:4px 8px;border-bottom:1px solid #eef4fb;white-space:normal;word-break:break-word}
+table.sub-tbl tr:last-child td{border-bottom:none}
+table.sub-tbl tr:hover td{background:#f0f7ff}
 
 /* ---- pagination ---- */
 .pagination{display:flex;align-items:center;gap:6px;margin-top:10px;justify-content:center}

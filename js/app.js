@@ -291,13 +291,38 @@
     doExport(all);
   }
 
+  function flattenRow(r) {
+    var out = {};
+    Object.keys(r).forEach(function (k) {
+      var v = r[k];
+      if (v === null || v === undefined) { out[k] = ""; return; }
+      if (Array.isArray(v)) {
+        if (v.length === 0) { out[k] = ""; return; }
+        if (typeof v[0] !== "object") { out[k] = v.join("; "); return; }
+        v.forEach(function (item, i) {
+          Object.keys(item).forEach(function (ik) {
+            var val = item[ik];
+            if (val !== null && typeof val === "object") val = JSON.stringify(val);
+            out[k + "_" + (i + 1) + "_" + ik] = val == null ? "" : val;
+          });
+        });
+        out[k + "_count"] = v.length;
+        return;
+      }
+      if (typeof v === "object") { out[k] = JSON.stringify(v); return; }
+      out[k] = v;
+    });
+    return out;
+  }
+
   function doExport(rows) {
     if (!rows.length) return toast("No data");
+    var flat = rows.map(flattenRow);
     var ak = {};
-    rows.forEach(function (r) { Object.keys(r).forEach(function (k) { if (typeof r[k] !== "object" || r[k] === null) ak[k] = true; }); });
+    flat.forEach(function (r) { Object.keys(r).forEach(function (k) { ak[k] = true; }); });
     var keys = Object.keys(ak);
-    var csv = keys.join(",") + "\n";
-    rows.forEach(function (r) {
+    var csv = keys.map(function (k) { return '"' + k.replace(/"/g, '""') + '"'; }).join(",") + "\n";
+    flat.forEach(function (r) {
       csv += keys.map(function (k) { var v = r[k]; if (v == null) return ""; return '"' + String(v).replace(/"/g, '""') + '"'; }).join(",") + "\n";
     });
     var a = document.createElement("a");
@@ -321,27 +346,128 @@
       .replace(/\bnull\b/g, '<span class="json-null">null</span>');
   }
 
-  /* ---- table ------------------------------------------------------------ */
+  /* ---- smart table ------------------------------------------------------ */
+
+  var CENTS_FIELDS = ["cost","retail","rate","totalSales","laborSales","partsSales","subletSales",
+    "discountTotal","feeTotal","taxes","amountPaid","partsTotal","laborTotal","subtotal",
+    "totalCost","price","total","creditLimit"];
+  var DATE_FIELDS = ["createdDate","updatedDate","deletedDate","completedDate","postedDate",
+    "authorizedDate","startTime","endTime","dropoffTime","pickupTime","birthday",
+    "appointmentStartTime","lastUsedDate","shareDate"];
+
+  function isCents(k) { return CENTS_FIELDS.indexOf(k) >= 0; }
+  function isDate(k) { return DATE_FIELDS.indexOf(k) >= 0 || k.indexOf("Date") >= 0 || k.indexOf("Time") >= 0; }
+
+  function fmtVal(k, v) {
+    if (v == null) return '<span style="color:var(--muted)">\u2014</span>';
+    if (v === true) return '<span class="badge-green" style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;background:#dcfce7;color:#16a34a">Yes</span>';
+    if (v === false) return '<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;background:#f1f5f9;color:#64748b">No</span>';
+    if (isCents(k) && typeof v === "number") return "$" + (v / 100).toFixed(2);
+    if (isDate(k) && typeof v === "string" && v.length > 8) {
+      var d = new Date(v);
+      if (!isNaN(d)) return d.toLocaleDateString() + " " + d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+    }
+    return esc(String(v));
+  }
+
+  function renderNestedObj(obj) {
+    if (obj === null || obj === undefined) return '<span style="color:var(--muted)">\u2014</span>';
+    if (typeof obj !== "object") return fmtVal("", obj);
+    if (Array.isArray(obj)) {
+      if (obj.length === 0) return '<span style="color:var(--muted)">None</span>';
+      if (typeof obj[0] !== "object") return esc(obj.join(", "));
+      return renderSubTable(obj);
+    }
+    var parts = [];
+    Object.keys(obj).forEach(function (k) {
+      var v = obj[k];
+      if (v !== null && typeof v === "object") return;
+      parts.push('<span style="color:var(--muted);font-size:10px">' + esc(k) + ':</span> ' + fmtVal(k, v));
+    });
+    return parts.join(" &middot; ") || esc(JSON.stringify(obj));
+  }
+
+  function renderSubTable(arr) {
+    if (!arr.length) return '<span style="color:var(--muted)">None</span>';
+    var keys = [];
+    arr.forEach(function (item) {
+      Object.keys(item).forEach(function (k) {
+        if (keys.indexOf(k) < 0 && (item[k] === null || typeof item[k] !== "object")) keys.push(k);
+      });
+    });
+    var nested = [];
+    arr.forEach(function (item) {
+      Object.keys(item).forEach(function (k) {
+        if (nested.indexOf(k) < 0 && item[k] !== null && typeof item[k] === "object") nested.push(k);
+      });
+    });
+
+    var h = '<table class="sub-tbl"><tr>';
+    keys.forEach(function (k) { h += "<th>" + esc(k) + "</th>"; });
+    if (nested.length) h += "<th>Details</th>";
+    h += "</tr>";
+    arr.forEach(function (item) {
+      h += "<tr>";
+      keys.forEach(function (k) { h += "<td>" + fmtVal(k, item[k]) + "</td>"; });
+      if (nested.length) {
+        var details = [];
+        nested.forEach(function (nk) {
+          if (item[nk] && ((Array.isArray(item[nk]) && item[nk].length) || !Array.isArray(item[nk]))) {
+            details.push('<span style="font-weight:600;font-size:10px;color:var(--accent)">' + esc(nk) + ':</span> ' + renderNestedObj(item[nk]));
+          }
+        });
+        h += "<td>" + (details.join("<br>") || "\u2014") + "</td>";
+      }
+      h += "</tr>";
+    });
+    return h + "</table>";
+  }
 
   function buildTable(data) {
     var c = g("respTable"), rows = [];
     if (data && data.content && Array.isArray(data.content)) rows = data.content;
     else if (Array.isArray(data)) rows = data;
     else if (data && typeof data === "object") {
-      var h = "<table><tr><th>Key</th><th>Value</th></tr>";
-      Object.keys(data).forEach(function (k) {
-        var v = data[k]; if (typeof v === "object" && v !== null) v = JSON.stringify(v);
-        h += "<tr><td><strong>" + esc(k) + "</strong></td><td>" + esc(String(v)) + "</td></tr>";
-      });
-      c.innerHTML = h + "</table>"; return;
+      c.innerHTML = renderKvTable(data); return;
     }
     if (!rows.length) { c.innerHTML = '<p style="padding:14px;color:var(--muted)">No data</p>'; return; }
-    var keys = Object.keys(rows[0]).filter(function (k) { var v = rows[0][k]; return v === null || typeof v !== "object"; });
-    var h = "<table><tr>"; keys.forEach(function (k) { h += "<th>" + esc(k) + "</th>"; }); h += "</tr>";
+
+    var flatKeys = [], objKeys = [];
     rows.forEach(function (row) {
-      h += "<tr>"; keys.forEach(function (k) { var v = row[k]; h += "<td>" + esc(v == null ? "" : String(v)) + "</td>"; }); h += "</tr>";
+      Object.keys(row).forEach(function (k) {
+        var v = row[k];
+        if (v !== null && typeof v === "object") { if (objKeys.indexOf(k) < 0) objKeys.push(k); }
+        else { if (flatKeys.indexOf(k) < 0) flatKeys.push(k); }
+      });
+    });
+
+    var h = '<table><tr>';
+    flatKeys.forEach(function (k) { h += "<th>" + esc(k) + "</th>"; });
+    objKeys.forEach(function (k) { h += "<th>" + esc(k) + "</th>"; });
+    h += "</tr>";
+
+    rows.forEach(function (row) {
+      h += "<tr>";
+      flatKeys.forEach(function (k) { h += "<td>" + fmtVal(k, row[k]) + "</td>"; });
+      objKeys.forEach(function (k) { h += '<td class="nested-cell">' + renderNestedObj(row[k]) + "</td>"; });
+      h += "</tr>";
     });
     c.innerHTML = h + "</table>";
+  }
+
+  function renderKvTable(obj) {
+    var h = '<table><tr><th style="width:180px">Field</th><th>Value</th></tr>';
+    Object.keys(obj).forEach(function (k) {
+      var v = obj[k];
+      h += "<tr><td><strong>" + esc(k) + "</strong></td><td>";
+      if (v !== null && typeof v === "object") {
+        h += renderNestedObj(v);
+      } else {
+        h += fmtVal(k, v);
+      }
+      h += "</td></tr>";
+    });
+    return h + "</table>";
   }
 
   /* ---- tabs ------------------------------------------------------------- */
