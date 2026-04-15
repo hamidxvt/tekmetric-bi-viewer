@@ -174,18 +174,44 @@ body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;background:var(--
 
 /* ---- table ---- */
 table{width:100%;border-collapse:collapse;font-size:12px}
+table.main-tbl{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
 th{text-align:left;padding:8px 12px;background:var(--sky-lt);color:var(--accent);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;position:sticky;top:0;z-index:1}
-td{padding:8px 12px;border-bottom:1px solid var(--border);white-space:nowrap}
-tr{transition:background .1s}
-tr:hover td{background:#edf4fc}
+td{padding:7px 12px;border-bottom:1px solid var(--border);white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis}
+tr.data-row{transition:background .12s}
+tr.data-row:hover td{background:#edf4fc}
+tr.data-row.expandable{cursor:pointer}
+tr.data-row.expanded td{background:#e8f4fd;border-bottom-color:#d0e8f7}
 
-/* ---- nested sub-tables ---- */
-td.nested-cell{white-space:normal;padding:6px 8px;vertical-align:top;max-width:460px}
-table.sub-tbl{width:100%;border-collapse:collapse;margin:2px 0;border:1px solid var(--border);border-radius:6px;overflow:hidden;font-size:11px}
-table.sub-tbl th{padding:4px 8px;background:#eef4fb;color:var(--sky-dk);font-size:9px;letter-spacing:.5px;position:static}
-table.sub-tbl td{padding:4px 8px;border-bottom:1px solid #eef4fb;white-space:normal;word-break:break-word}
+/* expand toggle column */
+.th-expand{width:28px;min-width:28px;padding:0 4px}
+.td-expand{width:28px;min-width:28px;padding:0 4px;text-align:center;color:var(--muted);font-size:9px}
+.expand-icon{display:inline-block;transition:transform .15s;font-size:8px;color:var(--accent)}
+tr.expanded .expand-icon{color:var(--sky-dk)}
+
+/* nested count badges in main table */
+.nest-badge{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:20px;padding:0 6px;border-radius:10px;font-size:10px;font-weight:700;background:var(--sky-lt);color:var(--accent);border:1px solid var(--sky-mid)}
+.nest-badge.empty{background:#f1f5f9;color:var(--muted);border-color:var(--border)}
+
+/* value formatting badges */
+.val-null{color:var(--muted)}
+.val-bool{display:inline-block;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:600}
+.val-true{background:#dcfce7;color:#16a34a}
+.val-false{background:#f1f5f9;color:#64748b}
+
+/* expandable detail row */
+tr.detail-row td{padding:0;background:#f8fbfe;border-bottom:2px solid var(--sky-mid)}
+.detail-panel{padding:12px 16px 14px;display:flex;flex-wrap:wrap;gap:14px}
+.detail-section{flex:1;min-width:240px;max-width:100%}
+.detail-section h4{font-size:11px;font-weight:700;color:var(--sky-dk);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.detail-count{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;font-size:9px;font-weight:700;background:var(--accent);color:#fff}
+
+/* sub-tables inside detail panels */
+table.sub-tbl{width:100%;border-collapse:collapse;border:1px solid #dce6f0;border-radius:6px;overflow:hidden;font-size:11px;background:#fff}
+table.sub-tbl th{padding:5px 10px;background:#eef4fb;color:var(--sky-dk);font-size:9px;letter-spacing:.5px;position:static;border-bottom:1px solid #dce6f0}
+table.sub-tbl td{padding:5px 10px;border-bottom:1px solid #f0f4f8;white-space:normal;word-break:break-word;max-width:none;overflow:visible}
+table.sub-tbl td.sub-nested{font-family:var(--mono);font-size:10px;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 table.sub-tbl tr:last-child td{border-bottom:none}
-table.sub-tbl tr:hover td{background:#f0f7ff}
+table.sub-tbl tr:hover td{background:#f6faff}
 
 /* ---- pagination ---- */
 .pagination{display:flex;align-items:center;gap:6px;margin-top:10px;justify-content:center}
