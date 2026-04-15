@@ -136,10 +136,10 @@ body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;background:var(--
 .resp-meta{color:var(--muted);font-size:10px}
 .resp-btns{display:flex;gap:4px}
 
-/* ---- progress bar ---- */
-.progress-bar{width:100%;height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin:8px 0}
-.progress-fill{height:100%;background:var(--sky);border-radius:2px;transition:width .3s ease;width:0}
-.fetch-status{font-size:11px;color:var(--muted);margin-bottom:8px}
+/* ---- page jump dropdown ---- */
+.page-jump{padding:4px 8px;border:1px solid var(--border);border-radius:5px;font-size:11px;background:#fff;cursor:pointer;margin-left:4px;transition:border-color .15s}
+.page-jump:hover{border-color:var(--sky-mid)}
+.page-jump:focus{border-color:var(--sky);outline:none}
 
 /* ---- tabs with hover ---- */
 .resp-tabs{display:flex;border-bottom:1px solid var(--border);background:#fafcff}
