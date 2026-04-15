@@ -1,0 +1,11 @@
+{
+  "name": "tekmetric-bi-viewer",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "serve -s . -l 80"
+  },
+  "dependencies": {
+    "serve": "^14.2.4"
+  }
+}
