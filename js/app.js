@@ -381,6 +381,25 @@
     return fmtVal(k, v);
   }
 
+  function fmtNestedObj(obj) {
+    if (obj === null || obj === undefined) return '<span class="val-null">\u2014</span>';
+    if (Array.isArray(obj)) {
+      if (!obj.length) return '<span class="val-null">\u2014</span>';
+      return obj.map(function (item) {
+        if (typeof item !== "object" || item === null) return fmtVal("", item);
+        var bits = [];
+        Object.keys(item).forEach(function (k) { bits.push('<span class="kv-key">' + esc(k) + ':</span> ' + fmtVal(k, item[k])); });
+        return bits.join(", ");
+      }).join("<br>");
+    }
+    if (typeof obj === "object") {
+      var bits = [];
+      Object.keys(obj).forEach(function (k) { bits.push('<span class="kv-key">' + esc(k) + ':</span> ' + fmtVal(k, obj[k])); });
+      return bits.join(", ");
+    }
+    return fmtVal("", obj);
+  }
+
   function renderDetailPanel(row, objKeys) {
     var sections = [];
     objKeys.forEach(function (k) {
@@ -390,30 +409,27 @@
       if (items.length === 0) return;
       if (typeof items[0] !== "object") { sections.push('<div class="detail-section"><h4>' + esc(k) + '</h4><p>' + esc(items.join(", ")) + '</p></div>'); return; }
 
-      var subKeys = [];
+      var flatSub = [], nestedSub = [];
       items.forEach(function (item) {
         Object.keys(item).forEach(function (sk) {
-          if (subKeys.indexOf(sk) < 0) subKeys.push(sk);
+          var sv = item[sk];
+          if (sv !== null && typeof sv === "object") { if (nestedSub.indexOf(sk) < 0) nestedSub.push(sk); }
+          else { if (flatSub.indexOf(sk) < 0) flatSub.push(sk); }
         });
       });
 
       var h = '<div class="detail-section"><h4>' + esc(k) + ' <span class="detail-count">' + items.length + '</span></h4>';
-      h += '<table class="sub-tbl"><tr>';
-      subKeys.forEach(function (sk) { h += '<th>' + esc(sk) + '</th>'; });
-      h += '</tr>';
+      h += '<div class="sub-tbl-wrap"><table class="sub-tbl"><thead><tr>';
+      flatSub.forEach(function (sk) { h += '<th>' + esc(sk) + '</th>'; });
+      nestedSub.forEach(function (sk) { h += '<th>' + esc(sk) + '</th>'; });
+      h += '</tr></thead><tbody>';
       items.forEach(function (item) {
         h += '<tr>';
-        subKeys.forEach(function (sk) {
-          var sv = item[sk];
-          if (sv !== null && typeof sv === "object") {
-            h += '<td class="sub-nested">' + esc(JSON.stringify(sv)) + '</td>';
-          } else {
-            h += '<td>' + fmtVal(sk, sv) + '</td>';
-          }
-        });
+        flatSub.forEach(function (sk) { h += '<td>' + fmtVal(sk, item[sk]) + '</td>'; });
+        nestedSub.forEach(function (sk) { h += '<td class="sub-nested">' + fmtNestedObj(item[sk]) + '</td>'; });
         h += '</tr>';
       });
-      h += '</table></div>';
+      h += '</tbody></table></div></div>';
       sections.push(h);
     });
     return sections.join("");
@@ -488,26 +504,31 @@
   }
 
   function renderKvTable(obj) {
-    var h = '<table class="main-tbl"><tr><th style="width:180px">Field</th><th>Value</th></tr>';
+    var flatH = '<table class="main-tbl kv-tbl"><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody>';
+    var nestedSections = [];
+
     Object.keys(obj).forEach(function (k) {
       var v = obj[k];
-      h += "<tr><td><strong>" + esc(k) + "</strong></td><td>";
       if (v !== null && typeof v === "object") {
-        if (Array.isArray(v) && v.length && typeof v[0] === "object") {
-          h += renderDetailPanel({"_":v}, ["_"]).replace(/<h4>_.*?<\/h4>/g, "");
-        } else if (Array.isArray(v)) {
-          h += v.length ? esc(v.join(", ")) : '<span class="val-null">\u2014</span>';
+        var items = Array.isArray(v) ? v : [v];
+        if (items.length === 0 || (Array.isArray(v) && v.length === 0)) {
+          flatH += '<tr><td class="kv-label">' + esc(k) + '</td><td><span class="val-null">\u2014</span></td></tr>';
+        } else if (typeof items[0] !== "object") {
+          flatH += '<tr><td class="kv-label">' + esc(k) + '</td><td>' + esc(items.join(", ")) + '</td></tr>';
         } else {
-          var parts = [];
-          Object.keys(v).forEach(function (sk) { parts.push(esc(sk) + ": " + fmtVal(sk, v[sk])); });
-          h += parts.join(" &middot; ");
+          flatH += '<tr><td class="kv-label">' + esc(k) + '</td><td><span class="nest-badge">' + items.length + ' item' + (items.length > 1 ? 's' : '') + '</span></td></tr>';
+          nestedSections.push(renderDetailPanel({"_x_":v}, ["_x_"]).replace(/_x_/g, k));
         }
       } else {
-        h += fmtVal(k, v);
+        flatH += '<tr><td class="kv-label">' + esc(k) + '</td><td>' + fmtVal(k, v) + '</td></tr>';
       }
-      h += "</td></tr>";
     });
-    return h + "</table>";
+
+    flatH += '</tbody></table>';
+    if (nestedSections.length) {
+      flatH += '<div class="kv-nested-area">' + nestedSections.join("") + '</div>';
+    }
+    return flatH;
   }
 
   /* ---- tabs ------------------------------------------------------------- */
