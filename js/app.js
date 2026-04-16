@@ -720,7 +720,9 @@
     stats.innerHTML = h;
 
     dashTbl("dashRO", res[2], function (r) {
-      return "<td>" + (r.repairOrderNumber || r.id) + "</td><td>" + esc(r.repairOrderStatus ? r.repairOrderStatus.name : (r.repairOrderStatus || "")) + "</td><td>" + fmtD(r.createdDate) + "</td><td>" + fmtC(r.totalSales) + "</td>";
+      var st = r.repairOrderStatus;
+      var stName = st ? (typeof st === "object" ? (st.name || st.code || "") : st) : (r.status || "");
+      return "<td>" + (r.repairOrderNumber || r.id) + "</td><td>" + esc(stName) + "</td><td>" + fmtD(r.createdDate) + "</td><td>" + fmtC(r.totalSales) + "</td>";
     }, ["RO #","Status","Created","Total"]);
     dashTbl("dashAppt", res[4], function (a) {
       return "<td>" + a.id + "</td><td>" + fmtDt(a.startTime) + "</td><td>" + esc(a.appointmentStatus) + "</td><td>" + esc((a.description||"").substring(0,40)) + "</td>";
