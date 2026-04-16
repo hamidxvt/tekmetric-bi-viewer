@@ -1,13 +1,17 @@
 /* =====================================================================
-   Tekmetric API Explorer v5
-   - Show first page instantly, paginate server-side
-   - No live search: Enter or Send only
+   Tekmetric API Explorer v6
+   - Lightweight payloads: default page size 20, summary-first
+   - Lazy rendering: large JSON collapsed, tables capped with "Show More"
+   - Uses backend _meta pagination block
    ===================================================================== */
 (function () {
   "use strict";
 
   var BASE = (window.API_BASE || "").replace(/\/+$/, "");
   var g = function (id) { return document.getElementById(id); };
+
+  var MAX_TABLE_ROWS = 50;
+  var MAX_JSON_LENGTH = 50000;
 
   /* ---- endpoints -------------------------------------------------------- */
 
@@ -24,14 +28,20 @@
         {k:"deletedDateStart",l:"Deleted From",t:"date"},{k:"deletedDateEnd",l:"Deleted To",t:"date"},
         {k:"sort",l:"Sort By",t:"sel",o:[["","Default"],["lastName","Last Name"],["firstName","First Name"],["email","Email"]]},
         {k:"sortDirection",l:"Direction",t:"sel",o:[["","Default"],["ASC","Ascending"],["DESC","Descending"]]},
-        {k:"size",l:"Page Size",t:"sel",o:[["20","20"],["50","50"],["100","100"]],d:"100"}
+        {k:"size",l:"Page Size",t:"sel",o:[["20","20"],["50","50"],["100","100"]],d:"20"}
       ]},
     { id:"customer-detail", name:"Customer", path:"/api/customers/{id}",
       desc:"Returns a customer by ID.",
       params:[{k:"id",l:"Customer ID",t:"num",req:1,pp:1}]},
     { id:"customer-search", name:"Cross-Shop Search", path:"/api/customer/search",
-      desc:"Searches across all shop locations by email or phone.",
-      params:[{k:"email",l:"Email",t:"text",hint:"customer@email.com"},{k:"phone",l:"Phone",t:"text",hint:"555-123-4567"}]},
+      desc:"Searches across all shop locations by email or phone. Returns a lightweight summary with preview appointments. Click 'Load All Appointments' for full paginated data.",
+      params:[
+        {k:"email",l:"Email",t:"text",hint:"customer@email.com"},
+        {k:"phone",l:"Phone",t:"text",hint:"555-123-4567"},
+        {k:"include_appointments",l:"Load Appointments",t:"sel",o:[["false","Preview Only (fast)"],["true","Full (paginated)"]],d:"false"},
+        {k:"appointment_page",l:"Appt Page",t:"num",d:"0",hint:"Page number"},
+        {k:"appointment_size",l:"Appt Page Size",t:"sel",o:[["10","10"],["20","20"],["50","50"]],d:"20"}
+      ]},
     { id:"vehicles", name:"Vehicles", path:"/api/vehicles", paged:1,
       desc:"Returns a list of all vehicles filtered by the provided search parameters.",
       params:[
@@ -42,7 +52,7 @@
         {k:"deletedDateStart",l:"Deleted From",t:"date"},{k:"deletedDateEnd",l:"Deleted To",t:"date"},
         {k:"sort",l:"Sort By",t:"text",hint:"Field name"},
         {k:"sortDirection",l:"Direction",t:"sel",o:[["","Default"],["ASC","Ascending"],["DESC","Descending"]]},
-        {k:"size",l:"Page Size",t:"sel",o:[["20","20"],["50","50"],["100","100"]],d:"100"}
+        {k:"size",l:"Page Size",t:"sel",o:[["20","20"],["50","50"],["100","100"]],d:"20"}
       ]},
     { id:"vehicle-detail", name:"Vehicle", path:"/api/vehicles/{id}",
       desc:"Returns a vehicle by ID.",
@@ -61,7 +71,7 @@
         {k:"deletedDateStart",l:"Deleted From",t:"date"},{k:"deletedDateEnd",l:"Deleted To",t:"date"},
         {k:"sort",l:"Sort By",t:"sel",o:[["","Default"],["createdDate","Created Date"],["repairOrderNumber","RO #"],["customer.firstName","First Name"],["customer.lastName","Last Name"]]},
         {k:"sortDirection",l:"Direction",t:"sel",o:[["","Default"],["ASC","Ascending"],["DESC","Descending"]]},
-        {k:"size",l:"Page Size",t:"sel",o:[["20","20"],["50","50"],["100","100"]],d:"100"}
+        {k:"size",l:"Page Size",t:"sel",o:[["20","20"],["50","50"],["100","100"]],d:"20"}
       ]},
     { id:"ro-detail", name:"Repair Order", path:"/api/repair-orders/{id}",
       desc:"Returns a repair order by ID with jobs, sublets, fees, discounts.",
@@ -77,7 +87,7 @@
         {k:"repairOrderStatusId",l:"RO Status",t:"sel",o:[["","All"],["1","Estimate"],["2","WIP"],["3","Complete"],["4","Saved"],["5","Posted"],["6","Accts Recv"]]},
         {k:"sort",l:"Sort By",t:"sel",o:[["","Default"],["authorizedDate","Auth Date"]]},
         {k:"sortDirection",l:"Direction",t:"sel",o:[["","Default"],["ASC","Ascending"],["DESC","Descending"]]},
-        {k:"size",l:"Page Size",t:"sel",o:[["20","20"],["50","50"],["100","100"]],d:"100"}
+        {k:"size",l:"Page Size",t:"sel",o:[["20","20"],["50","50"],["100","100"]],d:"20"}
       ]},
     { id:"job-detail", name:"Job", path:"/api/jobs/{id}",
       desc:"Returns a job by ID with labor, parts, fees, discounts.",
@@ -91,7 +101,7 @@
         {k:"rates",l:"Labor Rates",t:"text",hint:"Cents, comma-sep"},
         {k:"sort",l:"Sort By",t:"sel",o:[["","Default"],["jobCategory","Category"]]},
         {k:"sortDirection",l:"Direction",t:"sel",o:[["","Default"],["ASC","Ascending"],["DESC","Descending"]]},
-        {k:"size",l:"Page Size",t:"sel",o:[["20","20"],["50","50"],["100","100"]],d:"100"}
+        {k:"size",l:"Page Size",t:"sel",o:[["20","20"],["50","50"],["100","100"]],d:"20"}
       ]},
     { id:"appointments", name:"Appointments", path:"/api/appointments", paged:1,
       desc:"Returns appointments filtered by parameters.",
@@ -102,7 +112,7 @@
         {k:"updatedDateStart",l:"Updated From",t:"date"},{k:"updatedDateEnd",l:"Updated To",t:"date"},
         {k:"includeDeleted",l:"Incl. Deleted",t:"sel",o:[["true","Yes"],["false","No"]],d:"true"},
         {k:"sort",l:"Sort By",t:"text"},{k:"sortDirection",l:"Direction",t:"sel",o:[["","Default"],["ASC","Ascending"],["DESC","Descending"]]},
-        {k:"size",l:"Page Size",t:"sel",o:[["20","20"],["50","50"],["100","100"]],d:"100"}
+        {k:"size",l:"Page Size",t:"sel",o:[["20","20"],["50","50"],["100","100"]],d:"20"}
       ]},
     { id:"appt-detail", name:"Appointment", path:"/api/appointments/{id}",
       desc:"Returns an appointment by ID.",
@@ -114,7 +124,7 @@
         {k:"search",l:"Search",t:"text",hint:"Name"},
         {k:"updatedDateStart",l:"Updated From",t:"date"},{k:"updatedDateEnd",l:"Updated To",t:"date"},
         {k:"sort",l:"Sort By",t:"text"},{k:"sortDirection",l:"Direction",t:"sel",o:[["","Default"],["ASC","Ascending"],["DESC","Descending"]]},
-        {k:"size",l:"Page Size",t:"sel",o:[["20","20"],["50","50"],["100","100"]],d:"100"}
+        {k:"size",l:"Page Size",t:"sel",o:[["20","20"],["50","50"],["100","100"]],d:"20"}
       ]},
     { id:"emp-detail", name:"Employee", path:"/api/employees/{id}",
       desc:"Returns an employee by ID.",
@@ -129,7 +139,7 @@
         {k:"diameter",l:"Diameter",t:"text",hint:"Tires"},{k:"tireSize",l:"Tire Size",t:"text"},
         {k:"sort",l:"Sort By",t:"sel",o:[["","Default"],["id","ID"],["name","Name"],["brand","Brand"],["partNumber","Part #"]]},
         {k:"sortDirection",l:"Direction",t:"sel",o:[["","Default"],["ASC","Ascending"],["DESC","Descending"]]},
-        {k:"size",l:"Page Size",t:"sel",o:[["20","20"],["50","50"],["100","100"]],d:"100"}
+        {k:"size",l:"Page Size",t:"sel",o:[["20","20"],["50","50"],["100","100"]],d:"20"}
       ]},
     { id:"shops-config", name:"Shops (Config)", path:"/api/shops", desc:"Configured shop locations.", params:[]},
     { id:"shops-tek", name:"Shops (Tekmetric)", path:"/api/shops/tekmetric", desc:"Raw shop data from Tekmetric API.", params:[]},
@@ -218,7 +228,7 @@
 
   function updUrl() { var el = g("urlPreview"); if (el) el.textContent = BASE + buildUrl(); }
 
-  /* ---- fetch one page (instant) ----------------------------------------- */
+  /* ---- fetch one page --------------------------------------------------- */
 
   async function doSend(page) {
     if (!cur) return;
@@ -245,12 +255,18 @@
       g("respTime").textContent = ms + "ms";
       g("respSize").textContent = kb + " KB";
 
-      var total = lastResp.totalElements;
-      var pageInfo = lastResp.totalPages ? " \u00b7 Page " + ((lastResp.number || 0) + 1) + "/" + lastResp.totalPages : "";
+      var meta = lastResp && lastResp._meta;
+      var total = meta ? meta.totalElements : lastResp.totalElements;
+      var pageInfo = "";
+      if (meta) {
+        pageInfo = " \u00b7 Page " + (meta.page + 1) + "/" + meta.totalPages;
+      } else if (lastResp.totalPages) {
+        pageInfo = " \u00b7 Page " + ((lastResp.number || 0) + 1) + "/" + lastResp.totalPages;
+      }
       g("statusText").textContent = (total != null ? total + " total" : "Ready") + pageInfo;
 
       showTab("pretty");
-      g("respPretty").innerHTML = hl(lastResp);
+      renderPrettyJson(lastResp, txt.length);
       g("respRaw").textContent = typeof lastResp === "string" ? lastResp : JSON.stringify(lastResp, null, 2);
       buildTable(lastResp);
       buildPag(lastResp);
@@ -265,22 +281,55 @@
     g("btnSend").disabled = false;
   }
 
-  /* ---- fetch ALL pages (for CSV export) --------------------------------- */
+  /* ---- lazy JSON rendering ---------------------------------------------- */
+
+  function renderPrettyJson(data, rawLen) {
+    var el = g("respPretty");
+
+    if (rawLen > MAX_JSON_LENGTH) {
+      var preview = {};
+      if (data && typeof data === "object") {
+        var keys = Object.keys(data);
+        keys.forEach(function (k) {
+          var v = data[k];
+          if (Array.isArray(v) && v.length > 3) {
+            preview[k] = v.slice(0, 3);
+            preview[k + " \u2026(truncated)"] = v.length + " items total";
+          } else {
+            preview[k] = v;
+          }
+        });
+      } else {
+        preview = data;
+      }
+      el.innerHTML = '<div class="json-warning">Response is large (' + (rawLen / 1024).toFixed(0) + ' KB). Showing preview \u2014 switch to Table view or use Raw tab for full data.</div>' + hl(preview);
+
+      return;
+    }
+
+    el.innerHTML = hl(data);
+  }
+
+  /* ---- CSV export (streaming for large sets) ---------------------------- */
 
   async function fetchAllForExport() {
-    if (!cur || !cur.paged || !lastResp) return toast("Send a request first");
-    var tp = lastResp.totalPages || 1;
-    var total = lastResp.totalElements || 0;
-    if (tp <= 1) return doExport(lastResp.content || []);
+    if (!cur || !lastResp) return toast("Send a request first");
 
-    if (!confirm("This will fetch all " + total + " records across " + tp + " pages.\nContinue?")) return;
+    var meta = lastResp._meta;
+    var tp = meta ? meta.totalPages : (lastResp.totalPages || 1);
+    var total = meta ? meta.totalElements : (lastResp.totalElements || 0);
 
-    toast("Fetching all " + tp + " pages\u2026");
-    g("statusText").textContent = "Exporting\u2026 0/" + tp;
+    if (!cur.paged || tp <= 1) return doExport(lastResp.content || (Array.isArray(lastResp) ? lastResp : []));
+
+    if (total > 500 && !confirm("This will fetch " + total + " records across " + tp + " pages.\nFor very large exports, consider using fewer pages.\nContinue?")) return;
+
+    var maxPages = Math.min(tp, 50);
+    toast("Fetching " + maxPages + " of " + tp + " pages\u2026");
+    g("statusText").textContent = "Exporting\u2026 0/" + maxPages;
 
     var all = [];
-    for (var p = 0; p < tp; p++) {
-      g("statusText").textContent = "Exporting\u2026 " + (p + 1) + "/" + tp;
+    for (var p = 0; p < maxPages; p++) {
+      g("statusText").textContent = "Exporting\u2026 " + (p + 1) + "/" + maxPages;
       try {
         var r = await fetch(BASE + buildUrl(p));
         var d = await r.json();
@@ -436,6 +485,8 @@
   }
 
   var _tblRowData = [];
+  var _tblAllRows = [];
+  var _tblShownCount = 0;
 
   function buildTable(data) {
     var c = g("respTable"), rows = [];
@@ -447,15 +498,24 @@
     if (!rows.length) { c.innerHTML = '<p style="padding:14px;color:var(--muted)">No data</p>'; return; }
 
     _tblRowData = rows;
+    _tblAllRows = rows;
+    _tblShownCount = Math.min(rows.length, MAX_TABLE_ROWS);
 
+    renderTableRows(c, rows, _tblShownCount);
+  }
+
+  function renderTableRows(container, rows, showCount) {
     var flatKeys = [], objKeys = [];
     rows.forEach(function (row) {
       Object.keys(row).forEach(function (k) {
+        if (k === "_meta" || k === "_links") return;
         var v = row[k];
         if (v !== null && typeof v === "object") { if (objKeys.indexOf(k) < 0) objKeys.push(k); }
         else { if (flatKeys.indexOf(k) < 0) flatKeys.push(k); }
       });
     });
+
+    var visible = rows.slice(0, showCount);
 
     var h = '<table class="main-tbl"><thead><tr>';
     if (objKeys.length) h += '<th class="th-expand"></th>';
@@ -463,7 +523,7 @@
     objKeys.forEach(function (k) { h += "<th>" + esc(k) + "</th>"; });
     h += "</tr></thead><tbody>";
 
-    rows.forEach(function (row, idx) {
+    visible.forEach(function (row, idx) {
       var hasNested = false;
       objKeys.forEach(function (k) {
         var v = row[k];
@@ -487,12 +547,17 @@
     });
 
     h += "</tbody></table>";
-    c.innerHTML = h;
 
-    c.querySelectorAll(".data-row.expandable").forEach(function (tr) {
+    if (rows.length > showCount) {
+      h += '<div class="show-more-bar"><button class="btn btn-show-more" onclick="EP.showMoreRows()">Show More (' + showCount + ' of ' + rows.length + ' rows shown)</button></div>';
+    }
+
+    container.innerHTML = h;
+
+    container.querySelectorAll(".data-row.expandable").forEach(function (tr) {
       tr.addEventListener("click", function () {
         var idx = tr.getAttribute("data-idx");
-        var detail = c.querySelector('[data-detail="' + idx + '"]');
+        var detail = container.querySelector('[data-detail="' + idx + '"]');
         if (!detail) return;
         var open = !detail.classList.contains("hidden");
         detail.classList.toggle("hidden");
@@ -503,11 +568,17 @@
     });
   }
 
+  function showMoreRows() {
+    _tblShownCount = Math.min(_tblShownCount + MAX_TABLE_ROWS, _tblAllRows.length);
+    renderTableRows(g("respTable"), _tblAllRows, _tblShownCount);
+  }
+
   function renderKvTable(obj) {
     var flatH = '<table class="main-tbl kv-tbl"><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody>';
     var nestedSections = [];
 
     Object.keys(obj).forEach(function (k) {
+      if (k === "_meta" || k === "_links") return;
       var v = obj[k];
       if (v !== null && typeof v === "object") {
         var items = Array.isArray(v) ? v : [v];
@@ -525,6 +596,11 @@
     });
 
     flatH += '</tbody></table>';
+
+    if (obj._meta) {
+      flatH += '<div class="meta-bar"><strong>Pagination:</strong> Page ' + (obj._meta.page + 1) + ' of ' + obj._meta.totalPages + ' \u00b7 ' + obj._meta.totalElements + ' total' + (obj._meta.hasMore ? ' \u00b7 More available' : '') + '</div>';
+    }
+
     if (nestedSections.length) {
       flatH += '<div class="kv-nested-area">' + nestedSections.join("") + '</div>';
     }
@@ -543,9 +619,26 @@
 
   function buildPag(data) {
     var p = g("epPag");
-    if (!data || data.totalPages == null || data.totalPages <= 0) { p.innerHTML = ""; return; }
-    var pg = data.number || 0, tp = data.totalPages, te = data.totalElements || 0;
-    var sz = (data.content || []).length;
+    if (!data) { p.innerHTML = ""; return; }
+
+    var meta = data._meta;
+    var pg, tp, te, sz;
+
+    if (meta) {
+      pg = meta.page || 0;
+      tp = meta.totalPages || 0;
+      te = meta.totalElements || 0;
+      sz = (data.content || []).length;
+    } else if (data.totalPages != null) {
+      pg = data.number || 0;
+      tp = data.totalPages;
+      te = data.totalElements || 0;
+      sz = (data.content || []).length;
+    } else {
+      p.innerHTML = ""; return;
+    }
+
+    if (tp <= 0) { p.innerHTML = ""; return; }
 
     var h = '<button ' + (pg <= 0 ? "disabled" : "") + ' onclick="EP.page(' + (pg - 1) + ')">Prev</button>';
     h += '<span class="pg">Page ' + (pg + 1) + " / " + tp + " \u00b7 " + te + " total (" + sz + " shown)</span>";
@@ -553,9 +646,10 @@
 
     if (tp > 2) {
       h += ' <select class="page-jump" onchange="EP.page(+this.value)" title="Jump to page">';
-      for (var i = 0; i < tp; i++) {
+      for (var i = 0; i < Math.min(tp, 100); i++) {
         h += '<option value="' + i + '"' + (i === pg ? " selected" : "") + '>Page ' + (i + 1) + '</option>';
       }
+      if (tp > 100) h += '<option disabled>(' + (tp - 100) + ' more...)</option>';
       h += '</select>';
     }
 
@@ -594,13 +688,18 @@
 
     var h = "";
     items.forEach(function (item, i) {
-      var r = res[i], cnt = r.status === "fulfilled" && r.value ? (r.value.totalElements != null ? r.value.totalElements : "?") : "\u2014";
+      var r = res[i], d = r.status === "fulfilled" ? r.value : null;
+      var cnt = "\u2014";
+      if (d) {
+        if (d._meta && d._meta.totalElements != null) cnt = d._meta.totalElements;
+        else if (d.totalElements != null) cnt = d.totalElements;
+      }
       h += '<div class="stat-card" onclick="EP.go(\'' + item.key + '\')"><div class="label">' + item.label + '</div><div class="value">' + cnt + '</div><div class="sub">Click to explore</div></div>';
     });
     stats.innerHTML = h;
 
     dashTbl("dashRO", res[2], function (r) {
-      return "<td>" + (r.repairOrderNumber || r.id) + "</td><td>" + esc(r.repairOrderStatus ? r.repairOrderStatus.name : "") + "</td><td>" + fmtD(r.createdDate) + "</td><td>" + fmtC(r.totalSales) + "</td>";
+      return "<td>" + (r.repairOrderNumber || r.id) + "</td><td>" + esc(r.repairOrderStatus ? r.repairOrderStatus.name : (r.repairOrderStatus || "")) + "</td><td>" + fmtD(r.createdDate) + "</td><td>" + fmtC(r.totalSales) + "</td>";
     }, ["RO #","Status","Created","Total"]);
     dashTbl("dashAppt", res[4], function (a) {
       return "<td>" + a.id + "</td><td>" + fmtDt(a.startTime) + "</td><td>" + esc(a.appointmentStatus) + "</td><td>" + esc((a.description||"").substring(0,40)) + "</td>";
@@ -610,11 +709,15 @@
 
   function dashTbl(id, result, rowFn, headers) {
     var c = g(id);
-    if (!result || result.status !== "fulfilled" || !result.value || !result.value.content || !result.value.content.length) {
+    if (!result || result.status !== "fulfilled" || !result.value) {
+      c.innerHTML = '<p style="padding:14px;color:var(--muted)">No data</p>'; return;
+    }
+    var content = result.value.content;
+    if (!content || !content.length) {
       c.innerHTML = '<p style="padding:14px;color:var(--muted)">No data</p>'; return;
     }
     var h = "<table><tr>"; headers.forEach(function (hd) { h += "<th>" + hd + "</th>"; }); h += "</tr>";
-    result.value.content.forEach(function (row) { h += "<tr>" + rowFn(row) + "</tr>"; });
+    content.forEach(function (row) { h += "<tr>" + rowFn(row) + "</tr>"; });
     c.innerHTML = h + "</table>";
   }
 
@@ -660,6 +763,7 @@
 
   window.EP = {
     go: goTo, send: function () { doSend(0); }, page: goPage, key: onKey, updUrl: updUrl,
+    showMoreRows: showMoreRows,
     copyUrl: function () { cp(BASE + buildUrl(), "URL copied"); },
     copyCurl: function () { cp("curl -X GET '" + BASE + buildUrl() + "'", "cURL copied"); },
     copyJson: function () { if (!lastResp) return toast("No data"); cp(JSON.stringify(lastResp, null, 2), "JSON copied"); },
