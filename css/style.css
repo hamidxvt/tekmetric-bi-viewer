@@ -243,6 +243,11 @@ table.kv-tbl td:last-child{white-space:normal;word-break:break-word}
 /* ---- large payload warning ---- */
 .json-warning{background:#fffbeb;border:1px solid #fbbf24;color:#92400e;padding:10px 14px;border-radius:6px;font-size:12px;margin:10px 14px;font-weight:600}
 
+/* ---- collapsed JSON info bar ---- */
+.json-collapsed-info{background:#f0f7ff;border:1px solid var(--sky-mid);color:var(--sky-dk);padding:10px 14px;border-radius:6px;font-size:12px;margin:10px 14px 6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn-expand-json{background:none;border:1px solid var(--sky-mid);color:var(--accent);padding:3px 10px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600;transition:all .15s}
+.btn-expand-json:hover{background:var(--sky);color:#fff;border-color:var(--sky)}
+
 /* ---- show more bar ---- */
 .show-more-bar{text-align:center;padding:14px}
 .btn-show-more{padding:8px 20px;background:var(--sky-lt);border:1px solid var(--sky-mid);border-radius:6px;color:var(--accent);font-weight:700;cursor:pointer;font-size:12px;transition:all .15s}

@@ -265,11 +265,13 @@
       }
       g("statusText").textContent = (total != null ? total + " total" : "Ready") + pageInfo;
 
-      showTab("pretty");
       renderPrettyJson(lastResp, txt.length);
       g("respRaw").textContent = typeof lastResp === "string" ? lastResp : JSON.stringify(lastResp, null, 2);
       buildTable(lastResp);
       buildPag(lastResp);
+
+      var hasContent = lastResp && (lastResp.content || Array.isArray(lastResp));
+      showTab(hasContent ? "table" : "pretty");
     } catch (err) {
       g("respStatus").textContent = "Error";
       g("respStatus").className = "resp-badge s5";
@@ -283,31 +285,50 @@
 
   /* ---- lazy JSON rendering ---------------------------------------------- */
 
+  var _fullJsonCache = null;
+
   function renderPrettyJson(data, rawLen) {
     var el = g("respPretty");
+    _fullJsonCache = data;
+
+    if (data && typeof data === "object" && data.content && Array.isArray(data.content)) {
+      var meta = data._meta || {};
+      var summary = {
+        _meta: meta,
+        content: data.content.slice(0, 2),
+      };
+      if (data.content.length > 2) {
+        summary["..."] = (data.content.length - 2) + " more items";
+      }
+      el.innerHTML = '<div class="json-collapsed-info">'
+        + '<strong>' + (meta.totalElements || data.content.length) + ' records</strong>'
+        + ' \u00b7 Page ' + ((meta.page || 0) + 1) + '/' + (meta.totalPages || 1)
+        + ' \u00b7 ' + (rawLen / 1024).toFixed(1) + ' KB'
+        + ' \u00b7 <button class="btn-expand-json" onclick="EP.expandJson()">Expand Full JSON</button>'
+        + '</div>'
+        + hl(summary);
+      return;
+    }
 
     if (rawLen > MAX_JSON_LENGTH) {
-      var preview = {};
-      if (data && typeof data === "object") {
-        var keys = Object.keys(data);
-        keys.forEach(function (k) {
-          var v = data[k];
-          if (Array.isArray(v) && v.length > 3) {
-            preview[k] = v.slice(0, 3);
-            preview[k + " \u2026(truncated)"] = v.length + " items total";
-          } else {
-            preview[k] = v;
-          }
-        });
-      } else {
-        preview = data;
-      }
-      el.innerHTML = '<div class="json-warning">Response is large (' + (rawLen / 1024).toFixed(0) + ' KB). Showing preview \u2014 switch to Table view or use Raw tab for full data.</div>' + hl(preview);
-
+      el.innerHTML = '<div class="json-collapsed-info">'
+        + 'Response is ' + (rawLen / 1024).toFixed(0) + ' KB'
+        + ' \u00b7 <button class="btn-expand-json" onclick="EP.expandJson()">Expand Full JSON</button>'
+        + '</div>'
+        + hl(typeof data === "object" ? Object.keys(data).reduce(function(o, k) {
+            var v = data[k];
+            o[k] = Array.isArray(v) ? "[" + v.length + " items]" : (typeof v === "object" && v ? "{...}" : v);
+            return o;
+          }, {}) : data);
       return;
     }
 
     el.innerHTML = hl(data);
+  }
+
+  function expandJson() {
+    if (!_fullJsonCache) return;
+    g("respPretty").innerHTML = hl(_fullJsonCache);
   }
 
   /* ---- CSV export (streaming for large sets) ---------------------------- */
@@ -763,7 +784,7 @@
 
   window.EP = {
     go: goTo, send: function () { doSend(0); }, page: goPage, key: onKey, updUrl: updUrl,
-    showMoreRows: showMoreRows,
+    showMoreRows: showMoreRows, expandJson: expandJson,
     copyUrl: function () { cp(BASE + buildUrl(), "URL copied"); },
     copyCurl: function () { cp("curl -X GET '" + BASE + buildUrl() + "'", "cURL copied"); },
     copyJson: function () { if (!lastResp) return toast("No data"); cp(JSON.stringify(lastResp, null, 2), "JSON copied"); },
