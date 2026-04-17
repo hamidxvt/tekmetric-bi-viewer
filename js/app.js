@@ -13,7 +13,7 @@
   var MAX_TABLE_ROWS = 50;
   var MAX_JSON_LENGTH = 50000;
 
-  /* ---- landing page <-> explorer toggle -------------------------------- */
+  /* ---- hash-based page routing ------------------------------------------ */
 
   var landingEl = g("landing");
   var explorerEl = g("explorerApp");
@@ -22,26 +22,45 @@
     explorerEl.classList.remove("active");
     landingEl.classList.add("active");
     document.body.classList.remove("in-explorer");
+    document.title = "Gemba Api Center";
   }
 
   function showExplorer() {
     landingEl.classList.remove("active");
     explorerEl.classList.add("active");
     document.body.classList.add("in-explorer");
+    document.title = "Tekmetric API Explorer";
   }
+
+  function navigateTo(page) {
+    if (page === "explorer") {
+      window.location.hash = "explorer";
+    } else {
+      window.location.hash = "";
+    }
+  }
+
+  function handleRoute() {
+    var hash = window.location.hash.replace("#", "");
+    if (hash === "explorer") {
+      showExplorer();
+      if (!cur) goTo("shops-config");
+    } else {
+      showLanding();
+    }
+  }
+
+  window.addEventListener("hashchange", handleRoute);
 
   document.querySelectorAll(".tool-card").forEach(function (card) {
     card.addEventListener("click", function () {
       var tool = card.getAttribute("data-tool");
-      if (tool === "explorer") {
-        showExplorer();
-        if (!cur) goTo("shops-config");
-      }
+      if (tool) navigateTo(tool);
     });
   });
 
   var backBtn = g("backToLanding");
-  if (backBtn) backBtn.addEventListener("click", showLanding);
+  if (backBtn) backBtn.addEventListener("click", function () { navigateTo("home"); });
 
   /* ---- endpoints -------------------------------------------------------- */
 
@@ -745,6 +764,7 @@
     var sel = g("shopSelect"); sel.innerHTML = "";
     if (!shops.length) sel.innerHTML = '<option value="">No shops</option>';
     else shops.forEach(function (s) { var o = document.createElement("option"); o.value = s.shop_id; o.textContent = s.name + " (" + s.shop_id + ")"; sel.appendChild(o); });
+    handleRoute();
   })();
 
   /* ---- public ----------------------------------------------------------- */
