@@ -3,10 +3,32 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Tekmetric API Explorer</title>
-<link rel="stylesheet" href="css/style.css?v=11">
+<title>Gemba Api Center</title>
+<link rel="stylesheet" href="css/style.css?v=12">
 </head>
 <body>
+
+<!-- ==================== LANDING PAGE ==================== -->
+<div id="landing" class="landing active">
+  <header class="landing-header">
+    <h1 class="landing-title">Gemba Api Center</h1>
+    <p class="landing-sub">Central hub for all Gemba tools and services</p>
+  </header>
+  <section class="card-grid">
+    <div class="tool-card" data-tool="explorer">
+      <div class="tool-card-icon blue">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      </div>
+      <h2>API Explorer</h2>
+      <p>Browse and test all Tekmetric API endpoints with an interactive explorer.</p>
+      <span class="tool-card-arrow">Open &rarr;</span>
+    </div>
+    <!-- more cards can be added here -->
+  </section>
+</div>
+
+<!-- ==================== API EXPLORER ==================== -->
+<div id="explorerApp" class="explorer-app">
 
 <button class="hamburger" aria-label="Menu">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
@@ -15,18 +37,16 @@
 
 <div class="app-shell">
 
-<!-- SIDEBAR — structured like api.tekmetric.com -->
 <aside class="sidebar">
   <div class="logo">
+    <button class="back-btn" id="backToLanding" title="Back to Gemba Api Center">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-    <div>Tekmetric API<span class="logo-sub">Explorer</span></div>
+    <div>API<span class="logo-sub">Explorer</span></div>
   </div>
 
   <nav class="side-nav" id="sideNav">
-    <div class="nav-group">
-      <div class="nav-heading">General</div>
-      <a data-ep="dashboard" class="active">Dashboard</a>
-    </div>
     <div class="nav-group">
       <div class="nav-heading">API</div>
       <a data-ep="shops-config">Shops</a>
@@ -72,10 +92,8 @@
   </nav>
 </aside>
 
-<!-- MAIN -->
 <div class="main">
 
-<!-- Topbar -->
 <div class="topbar">
   <span class="topbar-label">Shop</span>
   <select id="shopSelect"></select>
@@ -86,26 +104,14 @@
 
 <div class="content">
 
-<!-- Dashboard page -->
-<div id="page-dashboard" class="page active">
-  <h2 class="page-title">API Dashboard</h2>
-  <p class="page-desc">Overview of all data available for the selected shop. Click any card to explore that endpoint.</p>
-  <div class="stat-row" id="dashStats"></div>
-  <div class="two-col">
-    <div class="panel"><div class="panel-hd"><h3>Recent Repair Orders</h3></div><div class="panel-bd" id="dashRO"></div></div>
-    <div class="panel"><div class="panel-hd"><h3>Upcoming Appointments</h3></div><div class="panel-bd" id="dashAppt"></div></div>
-  </div>
-</div>
-
 <!-- Explorer page (all endpoints render here) -->
-<div id="page-explorer" class="page">
+<div id="page-explorer" class="page active">
   <div class="ep-header">
     <span class="method-pill">GET</span>
     <h2 class="page-title" id="epTitle"></h2>
   </div>
   <p class="page-desc" id="epDesc"></p>
 
-  <!-- Request Parameters -->
   <div class="panel">
     <div class="panel-hd">
       <h3>Request Parameters</h3>
@@ -117,7 +123,6 @@
     <div class="param-grid" id="paramGrid"></div>
   </div>
 
-  <!-- Request URL -->
   <div class="url-bar">
     <span class="url-label">GET</span>
     <code id="urlPreview"></code>
@@ -127,7 +132,6 @@
     <button class="url-btn" onclick="EP.copyCurl()" title="Copy cURL">cURL</button>
   </div>
 
-  <!-- Response -->
   <div class="panel resp-panel">
     <div class="panel-hd resp-hd">
       <div class="resp-info">
@@ -160,12 +164,13 @@
 </div><!-- /content -->
 </div><!-- /main -->
 </div><!-- /app-shell -->
+</div><!-- /explorerApp -->
 
 <div id="toast" class="toast"></div>
 
 <script>
   window.API_BASE = "https://tekmetricapienpoints-production.up.railway.app";
 </script>
-<script src="js/app.js?v=11"></script>
+<script src="js/app.js?v=12"></script>
 </body>
 </html>

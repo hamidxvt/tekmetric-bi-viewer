@@ -1,6 +1,6 @@
 /* =====================================================================
-   Tekmetric API Explorer v6
-   - Lightweight payloads: default page size 20, summary-first
+   Gemba Api Center — API Explorer v7
+   - Landing page with card navigation
    - Lazy rendering: large JSON collapsed, tables capped with "Show More"
    - Uses backend _meta pagination block
    ===================================================================== */
@@ -12,6 +12,36 @@
 
   var MAX_TABLE_ROWS = 50;
   var MAX_JSON_LENGTH = 50000;
+
+  /* ---- landing page <-> explorer toggle -------------------------------- */
+
+  var landingEl = g("landing");
+  var explorerEl = g("explorerApp");
+
+  function showLanding() {
+    explorerEl.classList.remove("active");
+    landingEl.classList.add("active");
+    document.body.classList.remove("in-explorer");
+  }
+
+  function showExplorer() {
+    landingEl.classList.remove("active");
+    explorerEl.classList.add("active");
+    document.body.classList.add("in-explorer");
+  }
+
+  document.querySelectorAll(".tool-card").forEach(function (card) {
+    card.addEventListener("click", function () {
+      var tool = card.getAttribute("data-tool");
+      if (tool === "explorer") {
+        showExplorer();
+        if (!cur) goTo("shops-config");
+      }
+    });
+  });
+
+  var backBtn = g("backToLanding");
+  if (backBtn) backBtn.addEventListener("click", showLanding);
 
   /* ---- endpoints -------------------------------------------------------- */
 
@@ -158,17 +188,14 @@
   });
 
   function goTo(id) {
-    document.querySelectorAll(".page").forEach(function (p) { p.classList.remove("active"); });
     document.querySelectorAll(".side-nav a").forEach(function (a) { a.classList.remove("active"); });
     var link = document.querySelector('[data-ep="' + id + '"]');
     if (link) link.classList.add("active");
     closeSidebar();
 
-    if (id === "dashboard") { g("page-dashboard").classList.add("active"); loadDashboard(); return; }
     var ep = ENDPOINTS.find(function (e) { return e.id === id; });
     if (!ep) return;
     cur = ep; curPage = 0;
-    g("page-explorer").classList.add("active");
     g("epTitle").textContent = ep.name;
     g("epDesc").textContent = ep.desc;
     buildParams(ep); updUrl(); clearResp();
@@ -687,69 +714,9 @@
     toast(msg);
   }
 
-  /* ---- dashboard -------------------------------------------------------- */
-
-  async function loadDashboard() {
-    var sid = g("shopSelect").value; if (!sid) return;
-    var stats = g("dashStats");
-    stats.innerHTML = '<div class="loading" style="grid-column:1/-1"><div class="spinner"></div></div>';
-
-    var items = [
-      {key:"customers",label:"Customers",url:"/api/customers?shop_id="+sid+"&size=1"},
-      {key:"vehicles",label:"Vehicles",url:"/api/vehicles?shop_id="+sid+"&size=1"},
-      {key:"repair-orders",label:"Repair Orders",url:"/api/repair-orders?shop_id="+sid+"&size=5&sortDirection=DESC"},
-      {key:"jobs",label:"Jobs",url:"/api/jobs?shop_id="+sid+"&size=1"},
-      {key:"appointments",label:"Appointments",url:"/api/appointments?shop_id="+sid+"&size=5&sortDirection=DESC"},
-      {key:"employees",label:"Employees",url:"/api/employees?shop_id="+sid+"&size=1"},
-      {key:"canned-jobs",label:"Canned Jobs",url:"/api/canned-jobs?shop_id="+sid+"&size=1"},
-      {key:"inventory",label:"Inventory",url:"/api/inventory?shop_id="+sid+"&size=1&partTypeId=1"}
-    ];
-
-    var res = await Promise.allSettled(items.map(function (i) { return fetch(BASE + i.url).then(function (r) { return r.json(); }); }));
-
-    var h = "";
-    items.forEach(function (item, i) {
-      var r = res[i], d = r.status === "fulfilled" ? r.value : null;
-      var cnt = "\u2014";
-      if (d) {
-        if (d._meta && d._meta.totalElements != null) cnt = d._meta.totalElements;
-        else if (d.totalElements != null) cnt = d.totalElements;
-      }
-      h += '<div class="stat-card" onclick="EP.go(\'' + item.key + '\')"><div class="label">' + item.label + '</div><div class="value">' + cnt + '</div><div class="sub">Click to explore</div></div>';
-    });
-    stats.innerHTML = h;
-
-    dashTbl("dashRO", res[2], function (r) {
-      var st = r.repairOrderStatus;
-      var stName = st ? (typeof st === "object" ? (st.name || st.code || "") : st) : (r.status || "");
-      return "<td>" + (r.repairOrderNumber || r.id) + "</td><td>" + esc(stName) + "</td><td>" + fmtD(r.createdDate) + "</td><td>" + fmtC(r.totalSales) + "</td>";
-    }, ["RO #","Status","Created","Total"]);
-    dashTbl("dashAppt", res[4], function (a) {
-      return "<td>" + a.id + "</td><td>" + fmtDt(a.startTime) + "</td><td>" + esc(a.appointmentStatus) + "</td><td>" + esc((a.description||"").substring(0,40)) + "</td>";
-    }, ["ID","Start","Status","Description"]);
-    g("statusText").textContent = "Ready";
-  }
-
-  function dashTbl(id, result, rowFn, headers) {
-    var c = g(id);
-    if (!result || result.status !== "fulfilled" || !result.value) {
-      c.innerHTML = '<p style="padding:14px;color:var(--muted)">No data</p>'; return;
-    }
-    var content = result.value.content;
-    if (!content || !content.length) {
-      c.innerHTML = '<p style="padding:14px;color:var(--muted)">No data</p>'; return;
-    }
-    var h = "<table><tr>"; headers.forEach(function (hd) { h += "<th>" + hd + "</th>"; }); h += "</tr>";
-    content.forEach(function (row) { h += "<tr>" + rowFn(row) + "</tr>"; });
-    c.innerHTML = h + "</table>";
-  }
-
   /* ---- util ------------------------------------------------------------- */
 
   function esc(s) { return s != null ? String(s).replace(/</g, "&lt;") : "\u2014"; }
-  function fmtD(v) { return v ? new Date(v).toLocaleDateString() : "\u2014"; }
-  function fmtDt(v) { if (!v) return "\u2014"; var d = new Date(v); return d.toLocaleDateString() + " " + d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}); }
-  function fmtC(v) { return v != null ? "$" + (v / 100).toFixed(2) : "\u2014"; }
 
   function clearResp() {
     g("respPretty").innerHTML = '<span class="placeholder">Press Enter or click Send</span>';
@@ -769,7 +736,6 @@
 
   g("shopSelect").addEventListener("change", function () {
     var sp = g("p_shop_id"); if (sp) sp.value = this.value; updUrl();
-    if (document.querySelector(".page.active").id === "page-dashboard") loadDashboard();
   });
 
   /* ---- boot ------------------------------------------------------------- */
@@ -779,7 +745,6 @@
     var sel = g("shopSelect"); sel.innerHTML = "";
     if (!shops.length) sel.innerHTML = '<option value="">No shops</option>';
     else shops.forEach(function (s) { var o = document.createElement("option"); o.value = s.shop_id; o.textContent = s.name + " (" + s.shop_id + ")"; sel.appendChild(o); });
-    goTo("dashboard");
   })();
 
   /* ---- public ----------------------------------------------------------- */
