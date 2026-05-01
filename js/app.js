@@ -1,5 +1,5 @@
 /* =====================================================================
-   Gemba Api Center — API Explorer v7
+   API Explorer v7
    - Landing page with card navigation
    - Lazy rendering: large JSON collapsed, tables capped with "Show More"
    - Uses backend _meta pagination block
@@ -22,7 +22,7 @@
     explorerEl.classList.remove("active");
     landingEl.classList.add("active");
     document.body.classList.remove("in-explorer");
-    document.title = "Gemba Api Center";
+    document.title = "API Explorer";
   }
 
   function showExplorer() {

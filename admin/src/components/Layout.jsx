@@ -26,7 +26,7 @@ function Sidebar({ onClose }) {
           <BoltIcon className="w-4 h-4 text-white" />
         </div>
         <div>
-          <p className="text-white font-semibold text-sm leading-tight">Gemba Api Center</p>
+          <p className="text-white font-semibold text-sm leading-tight">API Explorer</p>
           <p className="text-slate-400 text-xs">Admin Panel</p>
         </div>
         {/* Mobile close */}
