@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+admin/node_modules/
+
+# Built admin panel (built on server during deploy)
+admin/dist/
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# PM2
+ecosystem.config.js
